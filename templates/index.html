@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BigQuery Release Notes Dashboard</title>
+    <meta name="description" content="A premium interactive dashboard to explore and share Google Cloud BigQuery release notes.">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- CSS Stylesheet -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header Section -->
+        <header class="app-header">
+            <div class="header-logo-section">
+                <div class="bq-logo-icon">
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2005/svg">
+                        <path d="M19 3H5C3.9 3 3 3.9 3 5V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19V5C21 3.9 20.1 3 19 3ZM9 17H7V10H9V17ZM13 17H11V7H13V17ZM17 17H15V13H17V17Z" fill="currentColor"/>
+                    </svg>
+                </div>
+                <div>
+                    <h1>BigQuery Release Notes</h1>
+                    <p class="subtitle">Stay updated with the latest changes in Google Cloud BigQuery</p>
+                </div>
+            </div>
+            
+            <div class="header-actions">
+                <div class="cache-status" id="cache-status">Checking feed status...</div>
+                <button id="refresh-btn" class="btn btn-primary" title="Refresh feed data">
+                    <svg class="icon-refresh" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2005/svg">
+                        <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4C7.58 4 4.01 7.58 4.01 12C4.01 16.42 7.58 20 12 20C15.73 20 18.84 17.45 19.73 14H17.65C16.83 16.33 14.61 18 12 18C8.69 18 6 15.31 6 12C6 8.69 8.69 6 12 6C13.66 6 15.14 6.69 16.22 7.78L13 11H20V4L17.65 6.35Z" fill="currentColor"/>
+                    </svg>
+                    <span>Refresh</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Stats Section -->
+        <section class="stats-container" id="stats-container">
+            <div class="stat-card">
+                <div class="stat-value" id="stat-total">0</div>
+                <div class="stat-label">Total Updates</div>
+            </div>
+            <div class="stat-card stat-feature">
+                <div class="stat-value" id="stat-features">0</div>
+                <div class="stat-label">Features</div>
+            </div>
+            <div class="stat-card stat-change">
+                <div class="stat-value" id="stat-changes">0</div>
+                <div class="stat-label">Changes</div>
+            </div>
+            <div class="stat-card stat-issue">
+                <div class="stat-value" id="stat-issues">0</div>
+                <div class="stat-label">Issues & Breaks</div>
+            </div>
+        </section>
+
+        <!-- Filters Section -->
+        <section class="filters-container">
+            <div class="search-box">
+                <svg class="search-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2005/svg">
+                    <path d="M15.5 14H14.71L14.43 13.73C15.44 12.55 16 11.01 16 9.5C16 5.91 13.09 3 9.5 3C5.91 3 3 5.91 3 9.5C3 13.09 5.91 16 9.5 16C11.01 16 12.55 15.44 13.73 14.43L14 14.71V15.5L19 20.49L20.49 19L15.5 14ZM9.5 14C7.01 14 5 11.99 5 9.5C5 7.01 7.01 5 9.5 5C11.99 5 14 7.01 14 9.5C14 11.99 11.99 14 9.5 14Z" fill="currentColor"/>
+                </svg>
+                <input type="text" id="search-input" placeholder="Search updates (e.g. Gemini, partition)..." autocomplete="off">
+            </div>
+
+            <div class="filter-groups">
+                <div class="filter-badges" id="type-filters">
+                    <button class="filter-badge active" data-type="all">All</button>
+                    <button class="filter-badge" data-type="feature">Features</button>
+                    <button class="filter-badge" data-type="change">Changes</button>
+                    <button class="filter-badge" data-type="issue">Issues</button>
+                    <button class="filter-badge" data-type="breaking">Breaking</button>
+                    <button class="filter-badge" data-type="announcement">Announcements</button>
+                </div>
+
+                <div class="sort-select-wrapper">
+                    <label for="sort-select">Sort:</label>
+                    <select id="sort-select">
+                        <option value="newest">Newest First</option>
+                        <option value="oldest">Oldest First</option>
+                    </select>
+                </div>
+            </div>
+        </section>
+
+        <!-- Main Workspace: Feed Grid -->
+        <main class="feed-wrapper">
+            <!-- Loading Indicator -->
+            <div id="loading-state" class="loading-state hidden">
+                <div class="pulse-loader"></div>
+                <p>Fetching BigQuery updates...</p>
+            </div>
+
+            <!-- Error State -->
+            <div id="error-state" class="error-state hidden">
+                <div class="error-icon">⚠️</div>
+                <h2>Failed to Load Release Notes</h2>
+                <p id="error-message">Unknown error occurred</p>
+                <button class="btn btn-secondary" id="retry-btn">Retry</button>
+            </div>
+
+            <!-- Empty State -->
+            <div id="empty-state" class="empty-state hidden">
+                <div class="empty-icon">🔍</div>
+                <h2>No Updates Found</h2>
+                <p>Try clearing your search or filters to see all updates.</p>
+            </div>
+
+            <!-- Feed Grid -->
+            <div id="feed-grid" class="feed-grid"></div>
+        </main>
+
+        <!-- Floating Selection Bar -->
+        <div id="floating-select-bar" class="floating-bar hidden">
+            <div class="selection-info">
+                <span id="selected-count">0</span> update(s) selected
+            </div>
+            <div class="floating-actions">
+                <button id="clear-selection-btn" class="btn btn-tertiary">Clear</button>
+                <button id="tweet-selected-btn" class="btn btn-success">
+                    <svg viewBox="0 0 24 24" class="icon-x" fill="currentColor">
+                        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                    </svg>
+                    <span>Tweet Selected</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Tweet Composer Modal -->
+        <div id="tweet-modal" class="modal-overlay hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Compose Tweet</h2>
+                    <button class="close-modal-btn" id="close-modal-btn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="composer-container">
+                        <textarea id="tweet-textarea" rows="8" placeholder="What's happening?"></textarea>
+                        <div class="composer-footer">
+                            <span id="char-counter" class="char-counter">0 / 280</span>
+                            <div class="warning-msg id-warning hidden">Warning: Text exceeds 280 characters. We'll open it on X, but X may require you to edit.</div>
+                        </div>
+                    </div>
+                    
+                    <div class="preview-section">
+                        <h3>Selection Details</h3>
+                        <div id="tweet-preview-list" class="preview-list"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button id="copy-tweet-btn" class="btn btn-secondary">Copy Text</button>
+                    <button id="publish-tweet-btn" class="btn btn-success">
+                        <svg viewBox="0 0 24 24" class="icon-x" fill="currentColor">
+                            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                        </svg>
+                        <span>Post to X</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JS Logic -->
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
