@@ -187,17 +187,60 @@
                 <div id="feed-grid" class="feed-grid"></div>
             </main>
 
-            <!-- News Sidebar Column -->
-            <aside class="news-wrapper">
-                <div class="news-sidebar-header">
-                    <h2>Soccer News & Highlights</h2>
-                    <div class="pulse-news-indicator"></div>
-                </div>
-                <div id="news-loading-state" class="news-loading-state hidden">
-                    <div class="small-pulse-loader"></div>
-                </div>
-                <div id="news-list" class="news-list"></div>
-            </aside>
+            <!-- Sidebar Column -->
+            <div class="sidebar-column">
+                <!-- News Sidebar Column -->
+                <aside class="news-wrapper">
+                    <div class="news-sidebar-header">
+                        <h2>Soccer News & Highlights</h2>
+                        <div class="pulse-news-indicator"></div>
+                    </div>
+                    <div id="news-loading-state" class="news-loading-state hidden">
+                        <div class="small-pulse-loader"></div>
+                    </div>
+                    <div id="news-list" class="news-list"></div>
+                </aside>
+
+                <!-- Standings Widget -->
+                <section class="standings-wrapper">
+                    <div class="standings-header">
+                        <h2>Group Standings</h2>
+                        <select id="standings-group-select">
+                            <option value="Group A">Group A</option>
+                            <option value="Group B">Group B</option>
+                            <option value="Group C">Group C</option>
+                            <option value="Group D">Group D</option>
+                            <option value="Group E">Group E</option>
+                            <option value="Group F">Group F</option>
+                            <option value="Group G">Group G</option>
+                            <option value="Group H">Group H</option>
+                            <option value="Group I">Group I</option>
+                            <option value="Group J">Group J</option>
+                            <option value="Group K">Group K</option>
+                            <option value="Group L">Group L</option>
+                        </select>
+                    </div>
+                    <div class="standings-table-container">
+                        <table class="standings-table">
+                            <thead>
+                                <tr>
+                                    <th title="Position">#</th>
+                                    <th>Team</th>
+                                    <th title="Played">P</th>
+                                    <th title="Wins">W</th>
+                                    <th title="Draws">D</th>
+                                    <th title="Losses">L</th>
+                                    <th title="Goal Difference">GD</th>
+                                    <th title="Points">Pts</th>
+                                </tr>
+                            </thead>
+                            <tbody id="standings-tbody">
+                                <!-- Generated dynamically in JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
         </div>
 
         <!-- Floating Selection Bar -->

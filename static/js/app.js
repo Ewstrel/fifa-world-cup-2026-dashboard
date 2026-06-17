@@ -59,7 +59,11 @@ const elements = {
     get copyTweetBtn() { return document.getElementById('copy-tweet-btn'); },
     get publishTweetBtn() { return document.getElementById('publish-tweet-btn'); },
     get publishLinkedinBtn() { return document.getElementById('publish-linkedin-btn'); },
-    get publishTelegramBtn() { return document.getElementById('publish-telegram-btn'); }
+    get publishTelegramBtn() { return document.getElementById('publish-telegram-btn'); },
+    
+    // Standings
+    get standingsGroupSelect() { return document.getElementById('standings-group-select'); },
+    get standingsTbody() { return document.getElementById('standings-tbody'); }
 };
 
 // --- App Initialization ---
@@ -137,6 +141,11 @@ function initEventListeners() {
     elements.publishTweetBtn?.addEventListener('click', publishTweet);
     elements.publishLinkedinBtn?.addEventListener('click', publishLinkedin);
     elements.publishTelegramBtn?.addEventListener('click', publishTelegram);
+    
+    // Standings Widget: Group change
+    elements.standingsGroupSelect?.addEventListener('change', (e) => {
+        renderStandings(e.target.value);
+    });
 }
 
 // --- API Methods ---
@@ -184,6 +193,10 @@ async function loadDashboardData(forceRefresh = false) {
         calculateStats();
         renderMatches();
         
+        // Render standings table
+        const currentGroup = elements.standingsGroupSelect ? elements.standingsGroupSelect.value : 'Group A';
+        renderStandings(currentGroup);
+        
         // Update cache label
         updateCacheStatus(wcData.cached_at, wcData.from_cache);
         showState('grid');
@@ -210,7 +223,7 @@ function getFlagUrl(teamName) {
     const countryCodes = {
         "Mexico": "mx", "South Africa": "za", "South Korea": "kr", "Czech Republic": "cz",
         "Canada": "ca", "Bosnia & Herzegovina": "ba", "Qatar": "qa", "Switzerland": "ch",
-        "Germany": "de", "France": "fr", "Argentina": "ar", "Brazil": "br", "England": "gb",
+        "Germany": "de", "France": "fr", "Argentina": "ar", "Brazil": "br", "England": "gb-eng",
         "Spain": "es", "Italy": "it", "Portugal": "pt", "Netherlands": "nl", "Croatia": "hr",
         "Belgium": "be", "Uruguay": "uy", "USA": "us", "United States": "us", "Japan": "jp",
         "Australia": "au", "Morocco": "ma", "Senegal": "sn", "Poland": "pl", "Serbia": "rs",
@@ -218,7 +231,9 @@ function getFlagUrl(teamName) {
         "Tunisia": "tn", "Costa Rica": "cr", "Cameroon": "cm", "Ghana": "gh", "Ukraine": "ua",
         "Georgia": "ge", "Turkey": "tr", "Slovakia": "sk", "Romania": "ro", "Slovenia": "si",
         "Albania": "al", "Hungary": "hu", "Scotland": "gb-sct", "Austria": "at", "Sweden": "se",
-        "Switzerland": "ch"
+        "Algeria": "dz", "Cape Verde": "cv", "Colombia": "co", "Curaçao": "cw", "DR Congo": "cd",
+        "Egypt": "eg", "Haiti": "ht", "Iraq": "iq", "Ivory Coast": "ci", "Jordan": "jo",
+        "New Zealand": "nz", "Norway": "no", "Panama": "pa", "Paraguay": "py", "Uzbekistan": "uz"
     };
     const code = countryCodes[teamName];
     if (code) {
@@ -751,4 +766,94 @@ function initTheme() {
 function toggleTheme() {
     const isLight = document.body.classList.toggle('light-theme');
     localStorage.setItem('theme', isLight ? 'light' : 'dark');
+}
+
+// --- Standings Table Calculation ---
+function renderStandings(groupName) {
+    const tbody = elements.standingsTbody;
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    
+    // 1. Get all matches in this group
+    const groupMatches = state.rawMatches.filter(m => m.group === groupName);
+    
+    // 2. Extract unique teams in this group
+    const uniqueTeams = new Set();
+    groupMatches.forEach(m => {
+        uniqueTeams.add(m.team1);
+        uniqueTeams.add(m.team2);
+    });
+    
+    // 3. Initialize stats for each team
+    const stats = {};
+    uniqueTeams.forEach(team => {
+        stats[team] = {
+            name: team,
+            p: 0,   // Played
+            w: 0,   // Wins
+            d: 0,   // Draws
+            l: 0,   // Losses
+            gd: 0,  // Goal Difference
+            pts: 0  // Points
+        };
+    });
+    
+    // 4. Calculate stats from completed matches
+    groupMatches.forEach(m => {
+        const isPlayed = 'score' in m;
+        if (isPlayed && stats[m.team1] && stats[m.team2]) {
+            const g1 = m.score.ft[0];
+            const g2 = m.score.ft[1];
+            
+            stats[m.team1].p++;
+            stats[m.team2].p++;
+            stats[m.team1].gd += (g1 - g2);
+            stats[m.team2].gd += (g2 - g1);
+            
+            if (g1 > g2) {
+                stats[m.team1].w++;
+                stats[m.team1].pts += 3;
+                stats[m.team2].l++;
+            } else if (g1 < g2) {
+                stats[m.team2].w++;
+                stats[m.team2].pts += 3;
+                stats[m.team1].l++;
+            } else {
+                stats[m.team1].d++;
+                stats[m.team1].pts += 1;
+                stats[m.team2].d++;
+                stats[m.team2].pts += 1;
+            }
+        }
+    });
+    
+    // 5. Convert to array and sort
+    const standingsArray = Object.values(stats);
+    standingsArray.sort((a, b) => {
+        if (b.pts !== a.pts) return b.pts - a.pts; // Sort by points
+        if (b.gd !== a.gd) return b.gd - a.gd;     // Sort by goal difference
+        return a.name.localeCompare(b.name);        // Sort alphabetically
+    });
+    
+    // 6. Generate rows
+    standingsArray.forEach((team, index) => {
+        const row = document.createElement('tr');
+        const flag = getFlagUrl(team.name);
+        row.innerHTML = `
+            <td>${index + 1}</td>
+            <td>
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <img src="${flag}" alt="${team.name} flag" style="width: 18px; height: 18px; object-fit: cover; border-radius: 50%; border: 1px solid var(--border-color);">
+                    <span>${team.name}</span>
+                </div>
+            </td>
+            <td>${team.p}</td>
+            <td>${team.w}</td>
+            <td>${team.d}</td>
+            <td>${team.l}</td>
+            <td>${team.gd > 0 ? '+' + team.gd : team.gd}</td>
+            <td style="font-weight: 700;">${team.pts}</td>
+        `;
+        tbody.appendChild(row);
+    });
 }
