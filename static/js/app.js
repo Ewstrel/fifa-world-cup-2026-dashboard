@@ -3,6 +3,7 @@ let state = {
     rawReleases: [],      // Raw feed entries from Flask API
     parsedUpdates: [],    // Individual release items (parsed from entries)
     selectedIds: new Set(), // Set of selected update IDs
+    filteredUpdates: [],  // Currently filtered updates
     filters: {
         search: '',
         type: 'all'
@@ -15,6 +16,7 @@ const elements = {
     refreshBtn: document.getElementById('refresh-btn'),
     retryBtn: document.getElementById('retry-btn'),
     cacheStatus: document.getElementById('cache-status'),
+    exportCsvBtn: document.getElementById('export-csv-btn'),
     
     // Stats
     statTotal: document.getElementById('stat-total'),
@@ -62,6 +64,9 @@ function initEventListeners() {
     // Refresh button
     elements.refreshBtn.addEventListener('click', () => loadReleases(true));
     elements.retryBtn.addEventListener('click', () => loadReleases(true));
+    
+    // Export CSV button
+    elements.exportCsvBtn.addEventListener('click', exportToCSV);
     
     // Realtime search
     elements.searchInput.addEventListener('input', (e) => {
@@ -248,6 +253,9 @@ function renderFeed() {
         return state.sortBy === 'newest' ? dateB - dateA : dateA - dateB;
     });
     
+    // Save filtered list for CSV export
+    state.filteredUpdates = filtered;
+    
     // 3. Render State
     if (filtered.length === 0) {
         showState('empty');
@@ -274,7 +282,14 @@ function renderFeed() {
             <div class="card-body">
                 ${update.content}
             </div>
-            <div class="card-footer">
+            <div class="card-footer" style="gap: 0.5rem;">
+                <button class="copy-card-btn" data-id="${update.id}" title="Copy to clipboard">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                    <span>Copy</span>
+                </button>
                 <button class="tweet-card-btn" data-id="${update.id}">
                     <svg viewBox="0 0 24 24" fill="currentColor">
                         <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
@@ -286,11 +301,18 @@ function renderFeed() {
         
         // Card Click (Toggle Selection)
         card.addEventListener('click', (e) => {
-            // Prevent toggling selection if clicking a link or the Tweet button
-            if (e.target.tagName === 'A' || e.target.closest('.tweet-card-btn') || e.target.closest('a')) {
+            // Prevent toggling selection if clicking a link, copy button, or the Tweet button
+            if (e.target.tagName === 'A' || e.target.closest('.tweet-card-btn') || e.target.closest('.copy-card-btn') || e.target.closest('a')) {
                 return;
             }
             toggleCardSelection(update.id);
+        });
+        
+        // Copy Card Button Click
+        const copyBtn = card.querySelector('.copy-card-btn');
+        copyBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            copyCardText(update, copyBtn);
         });
         
         // Tweet Card Button Click
@@ -527,4 +549,52 @@ function publishTweet() {
     const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
     window.open(url, '_blank', 'noopener,noreferrer');
     closeTweetModal();
+}
+
+// --- Copy Card & Export CSV Helpers ---
+function copyCardText(update, btnElement) {
+    const plainText = getPlainText(update.content).replace(/\s+/g, ' ').trim();
+    const formattedText = `📝 BigQuery ${update.type} (${update.date}):\n${plainText}\n\nLink: ${update.link}`;
+    
+    navigator.clipboard.writeText(formattedText).then(() => {
+        const origText = btnElement.querySelector('span').textContent;
+        btnElement.querySelector('span').textContent = 'Copied!';
+        btnElement.classList.add('success');
+        
+        setTimeout(() => {
+            btnElement.querySelector('span').textContent = origText;
+            btnElement.classList.remove('success');
+        }, 2000);
+    }).catch(err => {
+        console.error('Failed to copy card text: ', err);
+    });
+}
+
+function exportToCSV() {
+    const updates = state.filteredUpdates || state.parsedUpdates;
+    if (updates.length === 0) {
+        alert("No updates to export!");
+        return;
+    }
+    
+    // Build CSV content
+    let csv = "Date,Type,Description,Link\n";
+    updates.forEach(up => {
+        const date = up.date.replace(/"/g, '""');
+        const type = up.type.replace(/"/g, '""');
+        const plainText = getPlainText(up.content).replace(/"/g, '""').replace(/\s+/g, ' ');
+        const link = up.link.replace(/"/g, '""');
+        csv += `"${date}","${type}","${plainText}","${link}"\n`;
+    });
+    
+    // Create blob download
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `bigquery_release_notes_${new Date().toISOString().slice(0,10)}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 }
