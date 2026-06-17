@@ -1,17 +1,18 @@
 // --- State Management ---
 let state = {
-    rawReleases: [],      // Raw feed entries from Flask API
-    parsedUpdates: [],    // Individual release items (parsed from entries)
-    selectedIds: new Set(), // Set of selected update IDs
-    filteredUpdates: [],  // Currently filtered updates
+    rawMatches: [],       // Raw match fixtures from Flask API
+    newsList: [],         // Live soccer news from Flask API
+    selectedIds: new Set(), // Set of selected match IDs
+    filteredMatches: [],  // Currently filtered matches
     filters: {
         search: '',
-        type: 'all'
+        status: 'all',    // 'all', 'played' (completed), 'upcoming' (scheduled)
+        group: 'all'      // 'all', 'Group A' ... 'Group L'
     },
-    sortBy: 'newest'      // 'newest' or 'oldest'
+    sortBy: 'oldest'      // 'oldest' or 'newest'
 };
 
-// --- DOM Element References ---
+// --- DOM Element References (Lazy Getters for Cache Resilience) ---
 const elements = {
     get refreshBtn() { return document.getElementById('refresh-btn'); },
     get retryBtn() { return document.getElementById('retry-btn'); },
@@ -21,13 +22,14 @@ const elements = {
     
     // Stats
     get statTotal() { return document.getElementById('stat-total'); },
-    get statFeatures() { return document.getElementById('stat-features'); },
-    get statChanges() { return document.getElementById('stat-changes'); },
-    get statIssues() { return document.getElementById('stat-issues'); },
+    get statPlayed() { return document.getElementById('stat-played'); },
+    get statUpcoming() { return document.getElementById('stat-upcoming'); },
+    get statGoals() { return document.getElementById('stat-goals'); },
     
     // Filtering
     get searchInput() { return document.getElementById('search-input'); },
     get typeFilters() { return document.getElementById('type-filters'); },
+    get groupSelect() { return document.getElementById('group-select'); },
     get sortSelect() { return document.getElementById('sort-select'); },
     
     // States & Grid
@@ -36,6 +38,10 @@ const elements = {
     get emptyState() { return document.getElementById('empty-state'); },
     get errorMessage() { return document.getElementById('error-message'); },
     get feedGrid() { return document.getElementById('feed-grid'); },
+    
+    // News Sidebar
+    get newsLoadingState() { return document.getElementById('news-loading-state'); },
+    get newsList() { return document.getElementById('news-list'); },
     
     // Floating Bar
     get floatingBar() { return document.getElementById('floating-select-bar'); },
@@ -60,14 +66,14 @@ const elements = {
 document.addEventListener('DOMContentLoaded', () => {
     initTheme();
     initEventListeners();
-    loadReleases();
+    loadDashboardData();
 });
 
 // --- Event Listeners Setup ---
 function initEventListeners() {
     // Refresh button
-    elements.refreshBtn?.addEventListener('click', () => loadReleases(true));
-    elements.retryBtn?.addEventListener('click', () => loadReleases(true));
+    elements.refreshBtn?.addEventListener('click', () => loadDashboardData(true));
+    elements.retryBtn?.addEventListener('click', () => loadDashboardData(true));
     
     // Theme toggle button
     elements.themeToggleBtn?.addEventListener('click', toggleTheme);
@@ -78,25 +84,30 @@ function initEventListeners() {
     // Realtime search
     elements.searchInput?.addEventListener('input', (e) => {
         state.filters.search = e.target.value.toLowerCase();
-        renderFeed();
+        renderMatches();
     });
     
-    // Type badge filters
+    // Type badge filters (status: Completed / Scheduled / All)
     elements.typeFilters?.addEventListener('click', (e) => {
         if (e.target.classList.contains('filter-badge')) {
-            // Update active state of badges
             document.querySelectorAll('.filter-badge').forEach(btn => btn.classList.remove('active'));
             e.target.classList.add('active');
             
-            state.filters.type = e.target.dataset.type;
-            renderFeed();
+            state.filters.status = e.target.dataset.type;
+            renderMatches();
         }
+    });
+    
+    // Group filter dropdown
+    elements.groupSelect?.addEventListener('change', (e) => {
+        state.filters.group = e.target.value;
+        renderMatches();
     });
     
     // Sort dropdown
     elements.sortSelect?.addEventListener('change', (e) => {
         state.sortBy = e.target.value;
-        renderFeed();
+        renderMatches();
     });
     
     // Floating Bar: Clear selection
@@ -104,9 +115,9 @@ function initEventListeners() {
     
     // Floating Bar: Tweet selected
     elements.tweetSelectedBtn?.addEventListener('click', () => {
-        const selectedUpdates = state.parsedUpdates.filter(up => state.selectedIds.has(up.id));
-        if (selectedUpdates.length > 0) {
-            openTweetModal(selectedUpdates);
+        const selectedMatches = state.rawMatches.filter(m => state.selectedIds.has(m.id));
+        if (selectedMatches.length > 0) {
+            openTweetModal(selectedMatches);
         }
     });
     
@@ -129,8 +140,10 @@ function initEventListeners() {
 }
 
 // --- API Methods ---
-async function loadReleases(forceRefresh = false) {
+async function loadDashboardData(forceRefresh = false) {
     showState('loading');
+    if (elements.newsLoadingState) elements.newsLoadingState.classList.remove('hidden');
+    if (elements.newsList) elements.newsList.innerHTML = '';
     
     // Spin refresh button
     const refreshIcon = elements.refreshBtn?.querySelector('svg');
@@ -138,33 +151,47 @@ async function loadReleases(forceRefresh = false) {
     if (elements.refreshBtn) elements.refreshBtn.disabled = true;
     
     try {
-        const url = forceRefresh ? '/api/releases?refresh=true' : '/api/releases';
-        const response = await fetch(url);
+        const refreshQueryParam = forceRefresh ? '?refresh=true' : '';
         
-        if (!response.ok) {
-            throw new Error(`HTTP error! Status: ${response.status}`);
+        // Fetch matches and news concurrently
+        const [wcRes, newsRes] = await Promise.all([
+            fetch(`/api/worldcup${refreshQueryParam}`),
+            fetch(`/api/news${refreshQueryParam}`)
+        ]);
+        
+        if (!wcRes.ok || !newsRes.ok) {
+            throw new Error('Failed to fetch data from backend API');
         }
         
-        const result = await response.json();
-        if (!result.success) {
-            throw new Error(result.error || 'Server failed to process feed');
-        }
+        const wcData = await wcRes.json();
+        const newsData = await newsRes.json();
         
-        state.rawReleases = result.releases;
-        state.parsedUpdates = processReleases(result.releases);
+        if (!wcData.success) throw new Error(wcData.error || 'Server failed to fetch World Cup data');
+        if (!newsData.success) throw new Error(newsData.error || 'Server failed to fetch soccer news');
+        
+        // 1. Process matches
+        // Add artificial ID for mapping
+        state.rawMatches = wcData.data.matches.map((m, index) => ({
+            id: `match_${index}`,
+            ...m
+        }));
         
         // Reset selections
         state.selectedIds.clear();
         updateFloatingBar();
         
-        // Render stats & feed
+        // Render stats & matches
         calculateStats();
-        renderFeed();
+        renderMatches();
         
         // Update cache label
-        updateCacheStatus(result.cached_at, result.from_cache);
-        
+        updateCacheStatus(wcData.cached_at, wcData.from_cache);
         showState('grid');
+        
+        // 2. Process News
+        state.newsList = newsData.news;
+        renderNews();
+        
     } catch (err) {
         console.error(err);
         if (elements.errorMessage) {
@@ -174,84 +201,59 @@ async function loadReleases(forceRefresh = false) {
     } finally {
         if (refreshIcon) refreshIcon.classList.remove('spinning');
         if (elements.refreshBtn) elements.refreshBtn.disabled = false;
+        if (elements.newsLoadingState) elements.newsLoadingState.classList.add('hidden');
     }
 }
 
-// --- Feed Parsing (HTML Sub-item extraction) ---
-function processReleases(rawReleases) {
-    const parsed = [];
-    let idCounter = 0;
-    
-    rawReleases.forEach((entry) => {
-        const dateStr = entry.title; // e.g., "June 15, 2026"
-        const entryLink = entry.link;
-        
-        // Parse the HTML content
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(entry.content, 'text/html');
-        const children = Array.from(doc.body.children);
-        
-        let currentType = 'Announcement'; // Default type if H3 is not first
-        let currentHtml = '';
-        
-        children.forEach((child) => {
-            if (child.tagName === 'H3') {
-                // If we accumulated html, push the previous item
-                if (currentHtml.trim()) {
-                    parsed.push({
-                        id: `item_${idCounter++}`,
-                        type: currentType,
-                        content: currentHtml.trim(),
-                        date: dateStr,
-                        link: entryLink
-                    });
-                }
-                currentType = child.textContent.trim();
-                currentHtml = '';
-            } else {
-                currentHtml += child.outerHTML;
-            }
-        });
-        
-        // Push the final item
-        if (currentHtml.trim()) {
-            parsed.push({
-                id: `item_${idCounter++}`,
-                type: currentType,
-                content: currentHtml.trim(),
-                date: dateStr,
-                link: entryLink
-            });
-        }
-    });
-    
-    return parsed;
+// --- Team Flag Mapping Helper ---
+function getFlagUrl(teamName) {
+    const countryCodes = {
+        "Mexico": "mx", "South Africa": "za", "South Korea": "kr", "Czech Republic": "cz",
+        "Canada": "ca", "Bosnia & Herzegovina": "ba", "Qatar": "qa", "Switzerland": "ch",
+        "Germany": "de", "France": "fr", "Argentina": "ar", "Brazil": "br", "England": "gb",
+        "Spain": "es", "Italy": "it", "Portugal": "pt", "Netherlands": "nl", "Croatia": "hr",
+        "Belgium": "be", "Uruguay": "uy", "USA": "us", "United States": "us", "Japan": "jp",
+        "Australia": "au", "Morocco": "ma", "Senegal": "sn", "Poland": "pl", "Serbia": "rs",
+        "Saudi Arabia": "sa", "Ecuador": "ec", "Iran": "ir", "Wales": "gb-wls", "Denmark": "dk",
+        "Tunisia": "tn", "Costa Rica": "cr", "Cameroon": "cm", "Ghana": "gh", "Ukraine": "ua",
+        "Georgia": "ge", "Turkey": "tr", "Slovakia": "sk", "Romania": "ro", "Slovenia": "si",
+        "Albania": "al", "Hungary": "hu", "Scotland": "gb-sct", "Austria": "at", "Sweden": "se",
+        "Switzerland": "ch"
+    };
+    const code = countryCodes[teamName];
+    if (code) {
+        return `https://flagcdn.com/w40/${code}.png`;
+    }
+    return `https://flagcdn.com/w40/un.png`;
 }
 
-// --- UI Rendering ---
-function renderFeed() {
+// --- Matches Rendering ---
+function renderMatches() {
     const grid = elements.feedGrid;
+    if (!grid) return;
     grid.innerHTML = '';
     
     // 1. Filter
-    let filtered = state.parsedUpdates.filter(update => {
-        // Type filter
-        if (state.filters.type !== 'all') {
-            const matchesType = update.type.toLowerCase() === state.filters.type.toLowerCase();
-            // Issue filter covers both Issue and Breaking when type filter is clicked
-            if (state.filters.type === 'issue') {
-                return update.type.toLowerCase() === 'issue' || update.type.toLowerCase() === 'breaking';
-            }
-            if (!matchesType) return false;
+    let filtered = state.rawMatches.filter(m => {
+        // Status filter (Completed / Scheduled)
+        const hasScore = 'score' in m;
+        if (state.filters.status === 'played' && !hasScore) return false;
+        if (state.filters.status === 'upcoming' && hasScore) return false;
+        
+        // Group filter
+        if (state.filters.group !== 'all') {
+            if (m.group !== state.filters.group) return false;
         }
         
-        // Search filter
+        // Search filter (Team names, stadium, round)
         if (state.filters.search) {
-            const plainText = getPlainText(update.content).toLowerCase();
-            const dateText = update.date.toLowerCase();
-            const typeText = update.type.toLowerCase();
             const search = state.filters.search;
-            return plainText.includes(search) || dateText.includes(search) || typeText.includes(search);
+            const matchesSearch = m.team1.toLowerCase().includes(search) || 
+                                  m.team2.toLowerCase().includes(search) || 
+                                  m.ground.toLowerCase().includes(search) || 
+                                  m.round.toLowerCase().includes(search) || 
+                                  (m.group && m.group.toLowerCase().includes(search));
+            if (!matchesSearch) return false;
         }
         
         return true;
@@ -264,15 +266,7 @@ function renderFeed() {
         return state.sortBy === 'newest' ? dateB - dateA : dateA - dateB;
     });
     
-    // Save filtered list for CSV export
-    state.filteredUpdates = filtered;
-    
-    // Calculate the newest date in the feed to determine the "NEW" badge threshold (within 48 hours of newest)
-    let maxDateTime = 0;
-    state.parsedUpdates.forEach(up => {
-        const d = new Date(up.date);
-        if (d > maxDateTime) maxDateTime = d.getTime();
-    });
+    state.filteredMatches = filtered;
     
     // 3. Render State
     if (filtered.length === 0) {
@@ -283,69 +277,135 @@ function renderFeed() {
     showState('grid');
     
     // 4. Generate Cards
-    filtered.forEach((update) => {
+    filtered.forEach((match) => {
         const card = document.createElement('div');
-        card.className = `update-card ${state.selectedIds.has(update.id) ? 'selected' : ''}`;
-        card.dataset.id = update.id;
+        card.className = `update-card ${state.selectedIds.has(match.id) ? 'selected' : ''}`;
+        card.dataset.id = match.id;
         
-        // Get badge class
-        const badgeClass = getTypeBadgeClass(update.type);
+        const isPlayed = 'score' in match;
+        const score1 = isPlayed ? match.score.ft[0] : '-';
+        const score2 = isPlayed ? match.score.ft[1] : '-';
+        const flag1 = getFlagUrl(match.team1);
+        const flag2 = getFlagUrl(match.team2);
         
-        // Check if update is within 48 hours of the newest release date in the feed
-        const updateDate = new Date(update.date);
-        const isNew = maxDateTime > 0 && (maxDateTime - updateDate.getTime()) <= (48 * 60 * 60 * 1000);
+        // Goals scoring list HTML
+        let goalsHtml = '';
+        if (isPlayed && ((match.goals1 && match.goals1.length > 0) || (match.goals2 && match.goals2.length > 0))) {
+            goalsHtml = `<div class="goals-list">
+                <div class="goals-list-title">Match Events</div>`;
+            if (match.goals1) {
+                match.goals1.forEach(g => {
+                    goalsHtml += `<div class="goal-item">${match.team1}: ${g.name} (${g.minute}')</div>`;
+                });
+            }
+            if (match.goals2) {
+                match.goals2.forEach(g => {
+                    goalsHtml += `<div class="goal-item">${match.team2}: ${g.name} (${g.minute}')</div>`;
+                });
+            }
+            goalsHtml += `</div>`;
+        }
         
         card.innerHTML = `
             <div class="card-select-indicator"></div>
             <div class="card-header">
-                <span class="badge ${badgeClass}">${update.type}</span>
-                ${isNew ? '<span class="badge badge-new">NEW</span>' : ''}
-                <span class="card-date">${update.date}</span>
+                <span class="badge ${isPlayed ? 'badge-feature' : 'badge-change'}">${isPlayed ? 'FT Result' : 'Upcoming'}</span>
+                <span class="badge badge-announcement">${match.group || 'Playoffs'}</span>
+                <span class="card-date">${match.round}</span>
             </div>
             <div class="card-body">
-                ${update.content}
+                <div class="team-row">
+                    <div class="team-info">
+                        <img class="team-flag" src="${flag1}" alt="${match.team1} flag">
+                        <span class="team-name">${match.team1}</span>
+                    </div>
+                    <span class="team-score">${score1}</span>
+                </div>
+                <div class="team-row">
+                    <div class="team-info">
+                        <img class="team-flag" src="${flag2}" alt="${match.team2} flag">
+                        <span class="team-name">${match.team2}</span>
+                    </div>
+                    <span class="team-score">${score2}</span>
+                </div>
+                ${goalsHtml}
             </div>
-            <div class="card-footer" style="gap: 0.5rem;">
-                <button class="copy-card-btn" data-id="${update.id}" title="Copy to clipboard">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                    </svg>
-                    <span>Copy</span>
-                </button>
-                <button class="tweet-card-btn" data-id="${update.id}">
-                    <svg viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-                    </svg>
-                    Tweet
-                </button>
+            <div class="card-footer">
+                <div class="match-venue" title="${match.ground}">📍 ${match.ground}</div>
+                <div class="card-actions">
+                    <button class="copy-card-btn" data-id="${match.id}" title="Copy scorecard">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                        </svg>
+                        <span>Copy</span>
+                    </button>
+                    <button class="tweet-card-btn" data-id="${match.id}">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                        </svg>
+                        Share
+                    </button>
+                </div>
             </div>
         `;
         
         // Card Click (Toggle Selection)
         card.addEventListener('click', (e) => {
-            // Prevent toggling selection if clicking a link, copy button, or the Tweet button
             if (e.target.tagName === 'A' || e.target.closest('.tweet-card-btn') || e.target.closest('.copy-card-btn') || e.target.closest('a')) {
                 return;
             }
-            toggleCardSelection(update.id);
+            toggleCardSelection(match.id);
         });
         
-        // Copy Card Button Click
+        // Copy Button Click
         const copyBtn = card.querySelector('.copy-card-btn');
         copyBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            copyCardText(update, copyBtn);
+            copyCardText(match, copyBtn);
         });
         
-        // Tweet Card Button Click
+        // Tweet Button Click
         const tweetBtn = card.querySelector('.tweet-card-btn');
         tweetBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            openTweetModal([update]);
+            openTweetModal([match]);
         });
         
         grid.appendChild(card);
+    });
+}
+
+// --- News Rendering ---
+function renderNews() {
+    const newsContainer = elements.newsList;
+    if (!newsContainer) return;
+    newsContainer.innerHTML = '';
+    
+    if (state.newsList.length === 0) {
+        newsContainer.innerHTML = '<div class="news-item" style="color: var(--text-muted);">No soccer news highlights available right now.</div>';
+        return;
+    }
+    
+    state.newsList.forEach(item => {
+        const newsEl = document.createElement('div');
+        newsEl.className = 'news-item';
+        
+        // Format pubDate nicely
+        let formattedDate = item.pubDate;
+        try {
+            const dateObj = new Date(item.pubDate);
+            formattedDate = dateObj.toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        } catch(e) {}
+        
+        newsEl.innerHTML = `
+            <h3 class="news-title">
+                <a href="${item.link}" target="_blank" rel="noopener noreferrer">${item.title}</a>
+            </h3>
+            <p class="news-desc">${item.description || 'Click title to read full report.'}</p>
+            <div class="news-meta">🕒 ${formattedDate}</div>
+        `;
+        newsContainer.appendChild(newsEl);
     });
 }
 
@@ -357,7 +417,6 @@ function toggleCardSelection(id) {
         state.selectedIds.add(id);
     }
     
-    // Update card styling directly to avoid full re-render
     const cardEl = document.querySelector(`.update-card[data-id="${id}"]`);
     if (cardEl) {
         cardEl.classList.toggle('selected', state.selectedIds.has(id));
@@ -385,42 +444,28 @@ function updateFloatingBar() {
 
 // --- Stats Counter ---
 function calculateStats() {
-    let total = state.parsedUpdates.length;
-    let features = 0;
-    let changes = 0;
-    let issues = 0;
+    let total = state.rawMatches.length;
+    let played = 0;
+    let upcoming = 0;
+    let goals = 0;
     
-    state.parsedUpdates.forEach(up => {
-        const type = up.type.toLowerCase();
-        if (type === 'feature') features++;
-        else if (type === 'change') changes++;
-        else if (type === 'issue' || type === 'breaking') issues++;
+    state.rawMatches.forEach(m => {
+        const isPlayed = 'score' in m;
+        if (isPlayed) {
+            played++;
+            goals += m.score.ft[0] + m.score.ft[1];
+        } else {
+            upcoming++;
+        }
     });
     
     if (elements.statTotal) elements.statTotal.textContent = total;
-    if (elements.statFeatures) elements.statFeatures.textContent = features;
-    if (elements.statChanges) elements.statChanges.textContent = changes;
-    if (elements.statIssues) elements.statIssues.textContent = issues;
+    if (elements.statPlayed) elements.statPlayed.textContent = played;
+    if (elements.statUpcoming) elements.statUpcoming.textContent = upcoming;
+    if (elements.statGoals) elements.statGoals.textContent = goals;
 }
 
-// --- Helper Utilities ---
-function getTypeBadgeClass(type) {
-    switch (type.toLowerCase()) {
-        case 'feature': return 'badge-feature';
-        case 'change': return 'badge-change';
-        case 'issue': return 'badge-issue';
-        case 'breaking': return 'badge-breaking';
-        case 'announcement': return 'badge-announcement';
-        default: return 'badge-default';
-    }
-}
-
-function getPlainText(html) {
-    const temp = document.createElement('div');
-    temp.innerHTML = html;
-    return temp.textContent || temp.innerText || '';
-}
-
+// --- Cache Status Label Helper ---
 function updateCacheStatus(epochSeconds, fromCache) {
     if (!epochSeconds || !elements.cacheStatus) return;
     const fetchDate = new Date(epochSeconds * 1000);
@@ -431,6 +476,7 @@ function updateCacheStatus(epochSeconds, fromCache) {
         : `Updated Live at ${dateStr}`;
 }
 
+// --- Visibility states ---
 function showState(mode) {
     elements.loadingState?.classList.toggle('hidden', mode !== 'loading');
     elements.errorState?.classList.toggle('hidden', mode !== 'error');
@@ -438,25 +484,28 @@ function showState(mode) {
     elements.feedGrid?.classList.toggle('hidden', mode !== 'grid');
 }
 
-// --- Tweet Composer Modal Methods ---
-let activeTweetUpdates = [];
+// --- Share Composer Modal Methods ---
+let activeShareMatches = [];
 
-function openTweetModal(updates) {
-    activeTweetUpdates = updates;
+function openTweetModal(matches) {
+    activeShareMatches = matches;
     
     // Generate prefilled text
-    const tweetText = generateTweetText(updates);
-    if (elements.tweetTextarea) elements.tweetTextarea.value = tweetText;
+    const shareText = generateShareText(matches);
+    if (elements.tweetTextarea) elements.tweetTextarea.value = shareText;
     
     // Render previews
     if (elements.tweetPreviewList) {
         elements.tweetPreviewList.innerHTML = '';
-        updates.forEach(up => {
+        matches.forEach(m => {
+            const isPlayed = 'score' in m;
+            const scoreStr = isPlayed ? `${m.score.ft[0]} - ${m.score.ft[1]}` : 'vs';
+            
             const previewItem = document.createElement('div');
             previewItem.className = 'preview-item';
             previewItem.innerHTML = `
-                <strong>[${up.type}] ${up.date}</strong>
-                <p>${getPlainText(up.content).substring(0, 100)}...</p>
+                <strong>[${m.group || 'Playoffs'}] ${m.team1} ${scoreStr} ${m.team2}</strong>
+                <p>📍 ${m.ground} | Round: ${m.round}</p>
             `;
             elements.tweetPreviewList.appendChild(previewItem);
         });
@@ -468,63 +517,53 @@ function openTweetModal(updates) {
     document.body.style.overflow = 'hidden'; // Lock background scrolling
 }
 
+// Close Modal
 function closeTweetModal() {
     elements.tweetModal?.classList.remove('active');
     document.body.style.overflow = ''; // Restore scroll
 }
 
-function generateTweetText(updates) {
-    if (updates.length === 1) {
-        // Single Update Format
-        const up = updates[0];
-        const emojiMap = {
-            'feature': '🚀',
-            'change': '⚙️',
-            'issue': '⚠️',
-            'breaking': '💥',
-            'announcement': '📢'
-        };
-        const emoji = emojiMap[up.type.toLowerCase()] || '📝';
-        const rawContent = getPlainText(up.content).replace(/\s+/g, ' ').trim();
+function generateShareText(matches) {
+    if (matches.length === 1) {
+        // Single Match Format
+        const m = matches[0];
+        const isPlayed = 'score' in m;
         
-        const header = `${emoji} BigQuery ${up.type} (${up.date}):\n`;
-        const link = `\n\nDocs: ${up.link}`;
-        
-        const maxLen = 280 - header.length - link.length;
-        let body = rawContent;
-        if (body.length > maxLen) {
-            body = body.substring(0, maxLen - 3) + '...';
+        let scoreStr = 'vs';
+        let goalsStr = '';
+        if (isPlayed) {
+            scoreStr = `${m.score.ft[0]} - ${m.score.ft[1]}`;
+            const events = [];
+            if (m.goals1) m.goals1.forEach(g => events.push(`${m.team1}: ${g.name} (${g.minute}')`));
+            if (m.goals2) m.goals2.forEach(g => events.push(`${m.team2}: ${g.name} (${g.minute}')`));
+            
+            if (events.length > 0) {
+                goalsStr = `\n⚽ Events: ${events.join(', ')}`;
+            }
         }
         
-        return `${header}${body}${link}`;
+        const emoji = isPlayed ? '🏆' : '📅';
+        const header = `${emoji} World Cup 2026 (${m.group || 'Playoffs'}):\n`;
+        const body = `${m.team1} ${scoreStr} ${m.team2}${goalsStr}\n📍 Stadium: ${m.ground}\nDate: ${m.date}`;
+        const footer = `\n\nFollow WC 2026 updates!`;
+        
+        const text = `${header}${body}${footer}`;
+        return text;
     } else {
-        // Multi Update Format
-        const header = `📢 Selected BigQuery Release Notes (${updates.length} updates):\n\n`;
-        const footer = `\n\nFull notes: https://docs.cloud.google.com/bigquery/docs/release-notes`;
+        // Multi Match Format
+        const header = `🏆 FIFA World Cup 2026 Scorecard (${matches.length} matches):\n\n`;
+        const footer = `\n\nTracked live at World Cup 2026 Dashboard!`;
         
         let body = '';
-        for (let i = 0; i < updates.length; i++) {
-            const up = updates[i];
-            const emojiMap = {
-                'feature': '🚀',
-                'change': '⚙️',
-                'issue': '⚠️',
-                'breaking': '💥',
-                'announcement': '📢'
-            };
-            const emoji = emojiMap[up.type.toLowerCase()] || '📝';
-            const cleanContent = getPlainText(up.content).replace(/\s+/g, ' ').trim();
-            const item = `${emoji} [${up.type}] ${cleanContent}`;
+        for (let i = 0; i < matches.length; i++) {
+            const m = matches[i];
+            const isPlayed = 'score' in m;
+            const scoreStr = isPlayed ? `${m.score.ft[0]} - ${m.score.ft[1]}` : 'vs';
+            const item = `• [${m.group || 'Playoffs'}] ${m.team1} ${scoreStr} ${m.team2}`;
             
-            // Preview how much space we have
             const testText = `${header}${body}${item}\n${footer}`;
             if (testText.length > 275) {
-                // If it overflows, truncate this one or add indicator
-                const spaceRemaining = 280 - `${header}${body}${footer}`.length - 25;
-                if (spaceRemaining > 10) {
-                    body += `${emoji} [${up.type}] ${cleanContent.substring(0, spaceRemaining)}...\n`;
-                }
-                body += `+ more updates!`;
+                body += `+ more match updates!`;
                 break;
             } else {
                 body += `${item}\n`;
@@ -611,20 +650,32 @@ function publishTelegram() {
 function publishLinkedin() {
     if (!elements.tweetTextarea) return;
     const text = elements.tweetTextarea.value;
-    const firstLink = activeTweetUpdates.length > 0 ? activeTweetUpdates[0].link : 'https://docs.cloud.google.com/bigquery/docs/release-notes';
     
     // Copy full text to clipboard for convenient pasting into the LinkedIn post creator
     navigator.clipboard.writeText(text);
     
+    const firstLink = 'https://www.fifa.com/en/tournaments/mens/worldcup/2026';
     const url = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(firstLink)}`;
     window.open(url, '_blank', 'noopener,noreferrer');
     closeTweetModal();
 }
 
 // --- Copy Card & Export CSV Helpers ---
-function copyCardText(update, btnElement) {
-    const plainText = getPlainText(update.content).replace(/\s+/g, ' ').trim();
-    const formattedText = `📝 BigQuery ${update.type} (${update.date}):\n${plainText}\n\nLink: ${update.link}`;
+function copyCardText(match, btnElement) {
+    const isPlayed = 'score' in match;
+    const scoreStr = isPlayed ? `${match.score.ft[0]} - ${match.score.ft[1]}` : 'vs';
+    
+    let goalsStr = '';
+    if (isPlayed) {
+        const events = [];
+        if (match.goals1) match.goals1.forEach(g => events.push(`${match.team1}: ${g.name} (${g.minute}')`));
+        if (match.goals2) match.goals2.forEach(g => events.push(`${match.team2}: ${g.name} (${g.minute}')`));
+        if (events.length > 0) {
+            goalsStr = `\nScorers:\n${events.map(e => `• ${e}`).join('\n')}`;
+        }
+    }
+    
+    const formattedText = `🏆 World Cup 2026 [${match.group || 'Playoffs'}] [${match.round}]:\n${match.team1} ${scoreStr} ${match.team2}${goalsStr}\n📍 Stadium: ${match.ground}\n📅 Date: ${match.date} | Time: ${match.time}`;
     
     navigator.clipboard.writeText(formattedText).then(() => {
         const origText = btnElement.querySelector('span').textContent;
@@ -641,20 +692,29 @@ function copyCardText(update, btnElement) {
 }
 
 function exportToCSV() {
-    const updates = state.filteredUpdates || state.parsedUpdates;
-    if (updates.length === 0) {
-        alert("No updates to export!");
+    const matches = state.filteredMatches || state.rawMatches;
+    if (matches.length === 0) {
+        alert("No matches to export!");
         return;
     }
     
     // Build CSV content
-    let csv = "Date,Type,Description,Link\n";
-    updates.forEach(up => {
-        const date = up.date.replace(/"/g, '""');
-        const type = up.type.replace(/"/g, '""');
-        const plainText = getPlainText(up.content).replace(/"/g, '""').replace(/\s+/g, ' ');
-        const link = up.link.replace(/"/g, '""');
-        csv += `"${date}","${type}","${plainText}","${link}"\n`;
+    let csv = "Date,Time,Round,Group,Team 1,Score 1,Score 2,Team 2,Stadium\n";
+    matches.forEach(m => {
+        const date = m.date.replace(/"/g, '""');
+        const timeVal = m.time.replace(/"/g, '""');
+        const round = m.round.replace(/"/g, '""');
+        const group = (m.group || 'Playoffs').replace(/"/g, '""');
+        const team1 = m.team1.replace(/"/g, '""');
+        
+        const isPlayed = 'score' in m;
+        const score1 = isPlayed ? m.score.ft[0] : '-';
+        const score2 = isPlayed ? m.score.ft[1] : '-';
+        
+        const team2 = m.team2.replace(/"/g, '""');
+        const ground = m.ground.replace(/"/g, '""');
+        
+        csv += `"${date}","${timeVal}","${round}","${group}","${team1}","${score1}","${score2}","${team2}","${ground}"\n`;
     });
     
     // Create blob download
@@ -662,7 +722,7 @@ function exportToCSV() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `bigquery_release_notes_${new Date().toISOString().slice(0,10)}.csv`);
+    link.setAttribute("download", `world_cup_2026_schedule_${new Date().toISOString().slice(0,10)}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
