@@ -51,7 +51,9 @@ const elements = {
     tweetPreviewList: document.getElementById('tweet-preview-list'),
     closeModalBtn: document.getElementById('close-modal-btn'),
     copyTweetBtn: document.getElementById('copy-tweet-btn'),
-    publishTweetBtn: document.getElementById('publish-tweet-btn')
+    publishTweetBtn: document.getElementById('publish-tweet-btn'),
+    publishLinkedinBtn: document.getElementById('publish-linkedin-btn'),
+    publishTelegramBtn: document.getElementById('publish-telegram-btn')
 };
 
 // --- App Initialization ---
@@ -120,8 +122,10 @@ function initEventListeners() {
     // Modal: Copy Tweet Text
     elements.copyTweetBtn.addEventListener('click', copyTweetText);
     
-    // Modal: Publish Tweet to X
+    // Modal: Publish sharing intents
     elements.publishTweetBtn.addEventListener('click', publishTweet);
+    elements.publishLinkedinBtn.addEventListener('click', publishLinkedin);
+    elements.publishTelegramBtn.addEventListener('click', publishTelegram);
 }
 
 // --- API Methods ---
@@ -261,6 +265,13 @@ function renderFeed() {
     // Save filtered list for CSV export
     state.filteredUpdates = filtered;
     
+    // Calculate the newest date in the feed to determine the "NEW" badge threshold (within 48 hours of newest)
+    let maxDateTime = 0;
+    state.parsedUpdates.forEach(up => {
+        const d = new Date(up.date);
+        if (d > maxDateTime) maxDateTime = d.getTime();
+    });
+    
     // 3. Render State
     if (filtered.length === 0) {
         showState('empty');
@@ -278,10 +289,15 @@ function renderFeed() {
         // Get badge class
         const badgeClass = getTypeBadgeClass(update.type);
         
+        // Check if update is within 48 hours of the newest release date in the feed
+        const updateDate = new Date(update.date);
+        const isNew = maxDateTime > 0 && (maxDateTime - updateDate.getTime()) <= (48 * 60 * 60 * 1000);
+        
         card.innerHTML = `
             <div class="card-select-indicator"></div>
             <div class="card-header">
                 <span class="badge ${badgeClass}">${update.type}</span>
+                ${isNew ? '<span class="badge badge-new">NEW</span>' : ''}
                 <span class="card-date">${update.date}</span>
             </div>
             <div class="card-body">
@@ -519,6 +535,25 @@ function updateCharCount() {
     const len = elements.tweetTextarea.value.length;
     elements.charCounter.textContent = `${len} / 280`;
     
+    // SVG Progress Ring calculations
+    const ringCircle = document.querySelector('.progress-ring__circle');
+    const ring = document.querySelector('.progress-ring');
+    
+    if (ringCircle && ring) {
+        const radius = 9;
+        const circumference = 2 * Math.PI * radius; // ~56.5
+        const percent = Math.min((len / 280) * 100, 100);
+        const offset = circumference - (percent / 100) * circumference;
+        ringCircle.style.strokeDashoffset = Math.max(0, offset);
+        
+        ring.classList.remove('warn', 'error');
+        if (len > 280) {
+            ring.classList.add('error');
+        } else if (len > 250) {
+            ring.classList.add('warn');
+        }
+    }
+    
     // Manage class styling for indicator
     elements.charCounter.classList.remove('near-limit', 'over-limit');
     elements.warningMsg.classList.add('hidden');
@@ -552,6 +587,25 @@ function copyTweetText() {
 function publishTweet() {
     const text = elements.tweetTextarea.value;
     const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+    closeTweetModal();
+}
+
+function publishTelegram() {
+    const text = elements.tweetTextarea.value;
+    const url = `https://t.me/share/url?url=&text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+    closeTweetModal();
+}
+
+function publishLinkedin() {
+    const text = elements.tweetTextarea.value;
+    const firstLink = activeTweetUpdates.length > 0 ? activeTweetUpdates[0].link : 'https://docs.cloud.google.com/bigquery/docs/release-notes';
+    
+    // Copy full text to clipboard for convenient pasting into the LinkedIn post creator
+    navigator.clipboard.writeText(text);
+    
+    const url = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(firstLink)}`;
     window.open(url, '_blank', 'noopener,noreferrer');
     closeTweetModal();
 }

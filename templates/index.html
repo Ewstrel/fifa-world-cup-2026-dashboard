@@ -166,7 +166,13 @@
                     <div class="composer-container">
                         <textarea id="tweet-textarea" rows="8" placeholder="What's happening?"></textarea>
                         <div class="composer-footer">
-                            <span id="char-counter" class="char-counter">0 / 280</span>
+                            <div class="char-count-wrapper">
+                                <svg class="progress-ring" width="24" height="24">
+                                    <circle class="progress-ring__circle-bg" stroke="var(--border-color)" stroke-width="2.5" fill="transparent" r="9" cx="12" cy="12"/>
+                                    <circle class="progress-ring__circle" stroke="var(--primary)" stroke-width="2.5" fill="transparent" r="9" cx="12" cy="12"/>
+                                </svg>
+                                <span id="char-counter" class="char-counter">0 / 280</span>
+                            </div>
                             <div class="warning-msg id-warning hidden">Warning: Text exceeds 280 characters. We'll open it on X, but X may require you to edit.</div>
                         </div>
                     </div>
@@ -176,8 +182,20 @@
                         <div id="tweet-preview-list" class="preview-list"></div>
                     </div>
                 </div>
-                <div class="modal-footer">
+                <div class="modal-footer" style="gap: 0.5rem; flex-wrap: wrap;">
                     <button id="copy-tweet-btn" class="btn btn-secondary">Copy Text</button>
+                    <button id="publish-linkedin-btn" class="btn btn-secondary" title="Share on LinkedIn">
+                        <svg viewBox="0 0 24 24" fill="currentColor" style="width: 1rem; height: 1rem;">
+                            <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.779-1.75-1.75s.784-1.75 1.75-1.75 1.75.779 1.75 1.75-.784 1.75-1.75 1.75zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
+                        </svg>
+                        <span>LinkedIn</span>
+                    </button>
+                    <button id="publish-telegram-btn" class="btn btn-secondary" title="Share on Telegram">
+                        <svg viewBox="0 0 24 24" fill="currentColor" style="width: 1.1rem; height: 1.1rem;">
+                            <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.562 8.161c-.18.717-.962 4.084-1.362 5.441-.17.575-.51.767-.783.791-.6.052-1.055-.386-1.637-.756-.91-.58-1.423-.941-2.308-1.503-.984-.627-.346-.971.215-1.53.147-.147 2.699-2.384 2.748-2.59.006-.026.01-.123-.05-.175s-.144-.035-.207-.021c-.089.02-1.517.933-4.281 2.741-.405.27-.771.402-1.097.395-.36-.008-1.05-.198-1.563-.359-.63-.197-1.129-.301-1.085-.635.023-.174.271-.352.743-.535 2.91-1.222 4.851-2.029 5.823-2.421 2.748-1.107 3.318-1.3 3.69-.13.372 1.17-.008 2.05-.008 2.05z"/>
+                        </svg>
+                        <span>Telegram</span>
+                    </button>
                     <button id="publish-tweet-btn" class="btn btn-success">
                         <svg viewBox="0 0 24 24" class="icon-x" fill="currentColor">
                             <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>

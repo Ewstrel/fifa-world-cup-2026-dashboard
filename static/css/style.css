@@ -1013,3 +1013,49 @@ body:not(.light-theme) .theme-toggle-btn .icon-sun {
     gap: 0.75rem;
     background: var(--modal-footer-bg);
 }
+
+/* --- Progress Ring & Theme-specific elements --- */
+.char-count-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    align-self: flex-end;
+}
+
+.progress-ring {
+    transform: rotate(-90deg);
+}
+
+.progress-ring__circle {
+    transition: stroke-dashoffset 0.1s ease, stroke 0.15s ease;
+    stroke-dasharray: 56.5; /* 2 * PI * r (r=9) */
+    stroke-dashoffset: 56.5;
+}
+
+.progress-ring.warn .progress-ring__circle {
+    stroke: var(--warning);
+}
+
+.progress-ring.error .progress-ring__circle {
+    stroke: var(--danger);
+}
+
+/* Glowing NEW Badge */
+.badge-new {
+    background-color: rgba(16, 185, 129, 0.15) !important;
+    color: #10b981 !important;
+    border-color: rgba(16, 185, 129, 0.4) !important;
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.25);
+    animation: pulse-glow 2s infinite alternate;
+}
+
+body.light-theme .badge-new {
+    background-color: rgba(21, 128, 61, 0.1) !important;
+    color: #166534 !important;
+    border-color: rgba(21, 128, 61, 0.3) !important;
+}
+
+@keyframes pulse-glow {
+    0% { opacity: 0.8; box-shadow: 0 0 4px rgba(16, 185, 129, 0.2); }
+    100% { opacity: 1; box-shadow: 0 0 12px rgba(16, 185, 129, 0.45); }
+}
