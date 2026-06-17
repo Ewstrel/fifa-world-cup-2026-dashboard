@@ -106,5 +106,5 @@ def add_header(response):
     return response
 
 if __name__ == "__main__":
-    # Run server on port 5000
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    # Run server on port 5001 (macOS AirPlay uses port 5000)
+    app.run(host="127.0.0.1", port=5001, debug=True)
