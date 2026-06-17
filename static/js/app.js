@@ -17,6 +17,7 @@ const elements = {
     retryBtn: document.getElementById('retry-btn'),
     cacheStatus: document.getElementById('cache-status'),
     exportCsvBtn: document.getElementById('export-csv-btn'),
+    themeToggleBtn: document.getElementById('theme-toggle-btn'),
     
     // Stats
     statTotal: document.getElementById('stat-total'),
@@ -55,6 +56,7 @@ const elements = {
 
 // --- App Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
+    initTheme();
     initEventListeners();
     loadReleases();
 });
@@ -64,6 +66,9 @@ function initEventListeners() {
     // Refresh button
     elements.refreshBtn.addEventListener('click', () => loadReleases(true));
     elements.retryBtn.addEventListener('click', () => loadReleases(true));
+    
+    // Theme toggle button
+    elements.themeToggleBtn.addEventListener('click', toggleTheme);
     
     // Export CSV button
     elements.exportCsvBtn.addEventListener('click', exportToCSV);
@@ -597,4 +602,19 @@ function exportToCSV() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+}
+
+// --- Theme Management Helpers ---
+function initTheme() {
+    const savedTheme = localStorage.getItem('theme') || 'dark';
+    if (savedTheme === 'light') {
+        document.body.classList.add('light-theme');
+    } else {
+        document.body.classList.remove('light-theme');
+    }
+}
+
+function toggleTheme() {
+    const isLight = document.body.classList.toggle('light-theme');
+    localStorage.setItem('theme', isLight ? 'light' : 'dark');
 }
