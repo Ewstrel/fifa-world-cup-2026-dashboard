@@ -63,7 +63,14 @@ const elements = {
     
     // Standings
     get standingsGroupSelect() { return document.getElementById('standings-group-select'); },
-    get standingsTbody() { return document.getElementById('standings-tbody'); }
+    get standingsTbody() { return document.getElementById('standings-tbody'); },
+
+    // View Switching & Bracket elements
+    get viewFeedBtn() { return document.getElementById('view-feed-btn'); },
+    get viewBracketBtn() { return document.getElementById('view-bracket-btn'); },
+    get bracketView() { return document.getElementById('bracket-view'); },
+    get bracketScrollContainer() { return document.getElementById('bracket-scroll-container'); },
+    get mainLayoutWrapper() { return document.getElementById('main-layout-wrapper'); }
 };
 
 // --- App Initialization ---
@@ -91,13 +98,17 @@ function initEventListeners() {
         renderMatches();
     });
     
-    // Type badge filters (status: Completed / Scheduled / All)
+    // Type badge filters (status: Completed / Scheduled / All / Playoffs)
     elements.typeFilters?.addEventListener('click', (e) => {
         if (e.target.classList.contains('filter-badge')) {
             document.querySelectorAll('.filter-badge').forEach(btn => btn.classList.remove('active'));
             e.target.classList.add('active');
             
             state.filters.status = e.target.dataset.type;
+            if (state.filters.status === 'playoffs') {
+                state.filters.group = 'all';
+                if (elements.groupSelect) elements.groupSelect.value = 'all';
+            }
             renderMatches();
         }
     });
@@ -146,6 +157,10 @@ function initEventListeners() {
     elements.standingsGroupSelect?.addEventListener('change', (e) => {
         renderStandings(e.target.value);
     });
+
+    // View Switcher: List vs Bracket
+    elements.viewFeedBtn?.addEventListener('click', () => switchView('feed'));
+    elements.viewBracketBtn?.addEventListener('click', () => switchView('bracket'));
 }
 
 // --- API Methods ---
@@ -259,10 +274,11 @@ function renderMatches() {
     
     // 1. Filter
     let filtered = state.rawMatches.filter(m => {
-        // Status filter (Completed / Scheduled)
+        // Status filter (Completed / Scheduled / Playoffs)
         const hasScore = 'score' in m;
         if (state.filters.status === 'played' && !hasScore) return false;
         if (state.filters.status === 'upcoming' && hasScore) return false;
+        if (state.filters.status === 'playoffs' && m.group) return false;
         
         // Group filter
         if (state.filters.group !== 'all') {
@@ -855,5 +871,213 @@ function renderStandings(groupName) {
             <td style="font-weight: 700;">${team.pts}</td>
         `;
         tbody.appendChild(row);
+    });
+}
+
+// --- Playoff Views & Bracket ---
+function switchView(viewName) {
+    if (viewName === 'feed') {
+        elements.viewFeedBtn?.classList.add('active');
+        elements.viewBracketBtn?.classList.remove('active');
+        elements.feedGrid?.classList.remove('hidden');
+        elements.bracketView?.classList.add('hidden');
+        elements.mainLayoutWrapper?.classList.remove('show-bracket');
+        // Show other filter controls
+        document.querySelector('.search-box')?.classList.remove('hidden');
+        document.querySelector('.filter-groups')?.classList.remove('hidden');
+    } else {
+        elements.viewFeedBtn?.classList.remove('active');
+        elements.viewBracketBtn?.classList.add('active');
+        elements.feedGrid?.classList.add('hidden');
+        elements.bracketView?.classList.remove('hidden');
+        elements.mainLayoutWrapper?.classList.add('show-bracket');
+        // Hide other filter controls to focus on the bracket
+        document.querySelector('.search-box')?.classList.add('hidden');
+        document.querySelector('.filter-groups')?.classList.add('hidden');
+        renderBracket();
+    }
+}
+
+function resolveTeamName(rawName, matchesMap) {
+    if (!rawName) return "TBD";
+    
+    const wMatch = rawName.match(/^W(\d+)$/);
+    if (wMatch) {
+        const sourceIndex = parseInt(wMatch[1]) - 1;
+        const sourceMatchId = `match_${sourceIndex}`;
+        const sourceMatch = matchesMap[sourceMatchId];
+        if (sourceMatch) {
+            const winner = getMatchWinner(sourceMatch);
+            return winner || `Winner of Match ${wMatch[1]}`;
+        }
+    }
+    
+    const lMatch = rawName.match(/^L(\d+)$/);
+    if (lMatch) {
+        const sourceIndex = parseInt(lMatch[1]) - 1;
+        const sourceMatchId = `match_${sourceIndex}`;
+        const sourceMatch = matchesMap[sourceMatchId];
+        if (sourceMatch) {
+            const loser = getMatchLoser(sourceMatch);
+            return loser || `Loser of Match ${lMatch[1]}`;
+        }
+    }
+    
+    return rawName;
+}
+
+function getMatchWinner(match) {
+    if (!match || !match.score) return null;
+    const s = match.score;
+    const t1 = match.team1_resolved || match.team1;
+    const t2 = match.team2_resolved || match.team2;
+
+    if (s.p) {
+        if (s.p[0] > s.p[1]) return t1;
+        if (s.p[0] < s.p[1]) return t2;
+    }
+    if (s.et) {
+        if (s.et[0] > s.et[1]) return t1;
+        if (s.et[0] < s.et[1]) return t2;
+    }
+    if (s.ft) {
+        if (s.ft[0] > s.ft[1]) return t1;
+        if (s.ft[0] < s.ft[1]) return t2;
+    }
+    return null;
+}
+
+function getMatchLoser(match) {
+    if (!match || !match.score) return null;
+    const winner = getMatchWinner(match);
+    if (!winner) return null;
+    
+    const t1 = match.team1_resolved || match.team1;
+    const t2 = match.team2_resolved || match.team2;
+    return winner === t1 ? t2 : t1;
+}
+
+function getResolvedPlayoffMatches() {
+    const matchesMap = {};
+    state.rawMatches.forEach(m => {
+        matchesMap[m.id] = { ...m };
+    });
+
+    const resolvedPlayoffMatches = [];
+    // Playoff matches are indices 72 to 103 (matches #73 to #104)
+    for (let idx = 72; idx < 104; idx++) {
+        const matchId = `match_${idx}`;
+        const match = matchesMap[matchId];
+        if (!match) continue;
+
+        match.team1_resolved = resolveTeamName(match.team1, matchesMap);
+        match.team2_resolved = resolveTeamName(match.team2, matchesMap);
+
+        resolvedPlayoffMatches.push(match);
+    }
+    return resolvedPlayoffMatches;
+}
+
+function renderBracket() {
+    const container = elements.bracketScrollContainer;
+    if (!container) return;
+    container.innerHTML = '';
+
+    const resolvedPlayoffs = getResolvedPlayoffMatches();
+    const roundNames = ['Round of 32', 'Round of 16', 'Quarter-final', 'Semi-final', 'Final'];
+    
+    const roundsData = {
+        'Round of 32': resolvedPlayoffs.filter(m => m.round === 'Round of 32'),
+        'Round of 16': resolvedPlayoffs.filter(m => m.round === 'Round of 16'),
+        'Quarter-final': resolvedPlayoffs.filter(m => m.round === 'Quarter-final'),
+        'Semi-final': resolvedPlayoffs.filter(m => m.round === 'Semi-final'),
+        'Final': resolvedPlayoffs.filter(m => m.round === 'Final' || m.round === 'Match for third place')
+    };
+
+    roundNames.forEach(roundName => {
+        const roundDiv = document.createElement('div');
+        roundDiv.className = 'bracket-round';
+        
+        const header = document.createElement('div');
+        header.className = 'bracket-round-header';
+        header.textContent = roundName;
+        roundDiv.appendChild(header);
+
+        const matches = roundsData[roundName] || [];
+        matches.forEach(match => {
+            const matchCard = document.createElement('div');
+            matchCard.className = 'bracket-match';
+            matchCard.dataset.id = match.id;
+
+            const isPlayed = 'score' in match;
+            const score1 = isPlayed ? match.score.ft[0] : '-';
+            const score2 = isPlayed ? match.score.ft[1] : '-';
+
+            const t1 = match.team1_resolved;
+            const t2 = match.team2_resolved;
+
+            const flag1 = getFlagUrl(t1);
+            const flag2 = getFlagUrl(t2);
+
+            const isTbd1 = t1.startsWith('Winner') || t1.startsWith('Loser') || t1 === 'TBD';
+            const isTbd2 = t2.startsWith('Winner') || t2.startsWith('Loser') || t2 === 'TBD';
+
+            const winnerName = getMatchWinner(match);
+
+            let row1Class = 'bracket-team-row';
+            let row2Class = 'bracket-team-row';
+
+            if (isTbd1) row1Class += ' tbd';
+            if (isTbd2) row2Class += ' tbd';
+
+            if (winnerName) {
+                if (winnerName === t1) {
+                    row1Class += ' winner';
+                    row2Class += ' loser';
+                } else if (winnerName === t2) {
+                    row2Class += ' winner';
+                    row1Class += ' loser';
+                }
+            }
+
+            let formattedDate = match.date;
+            try {
+                const d = new Date(match.date);
+                formattedDate = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            } catch (e) {}
+
+            const matchLabel = match.round === 'Match for third place' ? '3rd Place Match' : `Match ${match.id.split('_')[1] * 1 + 1}`;
+
+            matchCard.innerHTML = `
+                <div class="bracket-match-header">
+                    <span>${matchLabel}</span>
+                    <span>${formattedDate}</span>
+                </div>
+                <div class="bracket-match-body">
+                    <div class="${row1Class}">
+                        <div class="bracket-team-info">
+                            <img class="bracket-team-flag" src="${flag1}" alt="${t1} flag">
+                            <span class="bracket-team-name" title="${t1}">${t1}</span>
+                        </div>
+                        <span class="bracket-team-score">${score1}</span>
+                    </div>
+                    <div class="${row2Class}">
+                        <div class="bracket-team-info">
+                            <img class="bracket-team-flag" src="${flag2}" alt="${t2} flag">
+                            <span class="bracket-team-name" title="${t2}">${t2}</span>
+                        </div>
+                        <span class="bracket-team-score">${score2}</span>
+                    </div>
+                </div>
+            `;
+
+            matchCard.addEventListener('click', () => {
+                openTweetModal([match]);
+            });
+
+            roundDiv.appendChild(matchCard);
+        });
+
+        container.appendChild(roundDiv);
     });
 }

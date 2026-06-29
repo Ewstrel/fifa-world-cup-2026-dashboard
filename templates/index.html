@@ -127,6 +127,7 @@
                     <button class="filter-badge active" data-type="all">All Matches</button>
                     <button class="filter-badge" data-type="played">Completed</button>
                     <button class="filter-badge" data-type="upcoming">Scheduled</button>
+                    <button class="filter-badge" data-type="playoffs">Playoffs</button>
                 </div>
 
                 <div class="group-select-wrapper">
@@ -159,9 +160,31 @@
         </section>
 
         <!-- Main Workspace: Two Column Layout (Matches Grid + News Sidebar) -->
-        <div class="main-layout-wrapper">
+        <div class="main-layout-wrapper" id="main-layout-wrapper">
             <!-- Matches Grid Column -->
             <main class="feed-wrapper">
+                <!-- View Switcher (List vs Bracket) -->
+                <div class="view-switcher">
+                    <button class="view-switch-btn active" id="view-feed-btn">
+                        <svg class="switch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="3" width="7" height="9"></rect>
+                            <rect x="14" y="3" width="7" height="5"></rect>
+                            <rect x="14" y="12" width="7" height="9"></rect>
+                            <rect x="3" y="16" width="7" height="5"></rect>
+                        </svg>
+                        <span>Matches List</span>
+                    </button>
+                    <button class="view-switch-btn" id="view-bracket-btn">
+                        <svg class="switch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z"></path>
+                            <path d="M12 6v12"></path>
+                            <path d="M8 10h8"></path>
+                            <path d="M8 14h8"></path>
+                        </svg>
+                        <span>Playoff Bracket</span>
+                    </button>
+                </div>
+
                 <!-- Loading Indicator -->
                 <div id="loading-state" class="loading-state hidden">
                     <div class="pulse-loader"></div>
@@ -185,6 +208,13 @@
 
                 <!-- Feed Grid -->
                 <div id="feed-grid" class="feed-grid"></div>
+
+                <!-- Playoff Bracket Tree View -->
+                <div id="bracket-view" class="bracket-view hidden">
+                    <div class="bracket-scroll-container" id="bracket-scroll-container">
+                        <!-- Populated dynamically in JS -->
+                    </div>
+                </div>
             </main>
 
             <!-- Sidebar Column -->
