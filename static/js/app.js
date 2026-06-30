@@ -995,21 +995,21 @@ function getCircularConnectionPath(rParent, rChild, theta1, theta2, rArc, thetaM
     const rad2 = (theta2 * Math.PI) / 180;
     const radMid = (thetaMid * Math.PI) / 180;
 
-    const p1_start_x = 400 + rParent * Math.cos(rad1);
-    const p1_start_y = 400 + rParent * Math.sin(rad1);
-    const p1_arc_x = 400 + rArc * Math.cos(rad1);
-    const p1_arc_y = 400 + rArc * Math.sin(rad1);
+    const p1_start_x = 600 + rParent * Math.cos(rad1);
+    const p1_start_y = 600 + rParent * Math.sin(rad1);
+    const p1_arc_x = 600 + rArc * Math.cos(rad1);
+    const p1_arc_y = 600 + rArc * Math.sin(rad1);
 
-    const p2_start_x = 400 + rParent * Math.cos(rad2);
-    const p2_start_y = 400 + rParent * Math.sin(rad2);
-    const p2_arc_x = 400 + rArc * Math.cos(rad2);
-    const p2_arc_y = 400 + rArc * Math.sin(rad2);
+    const p2_start_x = 600 + rParent * Math.cos(rad2);
+    const p2_start_y = 600 + rParent * Math.sin(rad2);
+    const p2_arc_x = 600 + rArc * Math.cos(rad2);
+    const p2_arc_y = 600 + rArc * Math.sin(rad2);
 
-    const pm_arc_x = 400 + rArc * Math.cos(radMid);
-    const pm_arc_y = 400 + rArc * Math.sin(radMid);
+    const pm_arc_x = 600 + rArc * Math.cos(radMid);
+    const pm_arc_y = 600 + rArc * Math.sin(radMid);
 
-    const p_child_x = 400 + rChild * Math.cos(radMid);
-    const p_child_y = 400 + rChild * Math.sin(radMid);
+    const p_child_x = 600 + rChild * Math.cos(radMid);
+    const p_child_y = 600 + rChild * Math.sin(radMid);
 
     return `M ${p1_start_x} ${p1_start_y} L ${p1_arc_x} ${p1_arc_y} A ${rArc} ${rArc} 0 ${largeArc} ${sweep} ${p2_arc_x} ${p2_arc_y} L ${p2_start_x} ${p2_start_y} M ${pm_arc_x} ${pm_arc_y} L ${p_child_x} ${p_child_y}`;
 }
@@ -1026,11 +1026,11 @@ function renderBracket() {
         matchesMap[m.id] = m;
     });
 
-    // 1. Build coordinate tree nodes in polar format mapped to cartesian
+    // 1. Build coordinate tree nodes in polar format mapped to cartesian (scaled by 1.5x)
     const treeNodes = {};
     const r32Order = [73, 76, 72, 74, 82, 83, 80, 81, 75, 77, 78, 79, 85, 87, 84, 86];
 
-    // Outermost level: Round of 32 (16 junctions at radius 270)
+    // Outermost level: Round of 32 (16 junctions at radius 405)
     r32Order.forEach((matchNum, idx) => {
         const matchId = `match_${matchNum}`;
         const angle = (idx * 360) / 16;
@@ -1039,13 +1039,13 @@ function renderBracket() {
             matchNum: matchNum,
             level: 4,
             angle: angle,
-            r: 270,
-            x: 400 + 270 * Math.cos((angle * Math.PI) / 180),
-            y: 400 + 270 * Math.sin((angle * Math.PI) / 180)
+            r: 405,
+            x: 600 + 405 * Math.cos((angle * Math.PI) / 180),
+            y: 600 + 405 * Math.sin((angle * Math.PI) / 180)
         };
     });
 
-    // Level 3: Round of 16 (8 junctions at radius 200)
+    // Level 3: Round of 16 (8 junctions at radius 300)
     const r16Mapping = [
         { id: 'match_88', children: ['match_73', 'match_76'] },
         { id: 'match_89', children: ['match_72', 'match_74'] },
@@ -1067,14 +1067,14 @@ function renderBracket() {
             id: item.id,
             level: 3,
             angle: angle,
-            r: 200,
-            x: 400 + 200 * Math.cos((angle * Math.PI) / 180),
-            y: 400 + 200 * Math.sin((angle * Math.PI) / 180),
+            r: 300,
+            x: 600 + 300 * Math.cos((angle * Math.PI) / 180),
+            y: 600 + 300 * Math.sin((angle * Math.PI) / 180),
             children: item.children
         };
     });
 
-    // Level 2: Quarter-finals (4 junctions at radius 135)
+    // Level 2: Quarter-finals (4 junctions at radius 202.5)
     const qfMapping = [
         { id: 'match_96', children: ['match_88', 'match_89'] },
         { id: 'match_97', children: ['match_92', 'match_93'] },
@@ -1092,14 +1092,14 @@ function renderBracket() {
             id: item.id,
             level: 2,
             angle: angle,
-            r: 135,
-            x: 400 + 135 * Math.cos((angle * Math.PI) / 180),
-            y: 400 + 135 * Math.sin((angle * Math.PI) / 180),
+            r: 202.5,
+            x: 600 + 202.5 * Math.cos((angle * Math.PI) / 180),
+            y: 600 + 202.5 * Math.sin((angle * Math.PI) / 180),
             children: item.children
         };
     });
 
-    // Level 1: Semi-finals (2 junctions at radius 75)
+    // Level 1: Semi-finals (2 junctions at radius 112.5)
     const sfMapping = [
         { id: 'match_100', children: ['match_96', 'match_97'] },
         { id: 'match_101', children: ['match_98', 'match_99'] }
@@ -1115,18 +1115,18 @@ function renderBracket() {
             id: item.id,
             level: 1,
             angle: angle,
-            r: 75,
-            x: 400 + 75 * Math.cos((angle * Math.PI) / 180),
-            y: 400 + 75 * Math.sin((angle * Math.PI) / 180),
+            r: 112.5,
+            x: 600 + 112.5 * Math.cos((angle * Math.PI) / 180),
+            y: 600 + 112.5 * Math.sin((angle * Math.PI) / 180),
             children: item.children
         };
     });
 
     const finalMatchId = 'match_103';
 
-    // Start SVG string
+    // Start SVG string (viewBox updated to 1200x1200)
     let svgHtml = `
-    <svg viewBox="0 0 800 800" width="100%" height="100%" class="radial-bracket-svg" style="max-width:980px; aspect-ratio:1/1;">
+    <svg viewBox="0 0 1200 1200" width="100%" height="100%" class="radial-bracket-svg" style="max-width:1150px; aspect-ratio:1/1;">
         <defs>
             <clipPath id="flag-clip" clipPathUnits="objectBoundingBox">
                 <circle r="0.5" cx="0.5" cy="0.5" />
@@ -1163,7 +1163,7 @@ function renderBracket() {
     const finalCompleted = finalMatch && 'score' in finalMatch;
     
     const { thetaMid: finalThetaMid, sweep: finalSweep, largeArc: finalLargeArc } = getAngleStats(sf1.angle, sf2.angle);
-    const finalPathStr = getCircularConnectionPath(75, 30, sf1.angle, sf2.angle, 50, finalThetaMid, finalSweep, finalLargeArc);
+    const finalPathStr = getCircularConnectionPath(112.5, 45, sf1.angle, sf2.angle, 75, finalThetaMid, finalSweep, finalLargeArc);
     svgHtml += `
         <path d="${finalPathStr}" class="bracket-line ${finalCompleted ? 'active' : ''}" />
     `;
@@ -1177,16 +1177,16 @@ function renderBracket() {
         const node = treeNodes[matchId];
         const angle = node.angle;
 
-        const rFlag = 332;
+        const rFlag = 498;
         const angleOffset = 4.8;
         
         const a1 = angle - angleOffset;
         const a2 = angle + angleOffset;
 
-        const f1x = 400 + rFlag * Math.cos((a1 * Math.PI) / 180);
-        const f1y = 400 + rFlag * Math.sin((a1 * Math.PI) / 180);
-        const f2x = 400 + rFlag * Math.cos((a2 * Math.PI) / 180);
-        const f2y = 400 + rFlag * Math.sin((a2 * Math.PI) / 180);
+        const f1x = 600 + rFlag * Math.cos((a1 * Math.PI) / 180);
+        const f1y = 600 + rFlag * Math.sin((a1 * Math.PI) / 180);
+        const f2x = 600 + rFlag * Math.cos((a2 * Math.PI) / 180);
+        const f2y = 600 + rFlag * Math.sin((a2 * Math.PI) / 180);
 
         const flag1 = getFlagUrl(match.team1_resolved);
         const flag2 = getFlagUrl(match.team2_resolved);
@@ -1209,17 +1209,17 @@ function renderBracket() {
 
         svgHtml += `
             <g class="bracket-flag-wrapper" style="--flag-cx: ${f1x}px; --flag-cy: ${f1y}px;" data-match-id="${match.id}">
-                <circle cx="${f1x}" cy="${f1y}" r="14" fill="var(--bg-card)" stroke="${team1Winner ? 'var(--primary)' : 'var(--border-color)'}" stroke-width="${team1Winner ? '2' : '1.5'}" style="opacity: ${hasWinner && !team1Winner ? '0.45' : '1'}" />
-                <image href="${flag1}" x="${f1x - 11}" y="${f1y - 11}" width="22" height="22" clip-path="url(#flag-clip)" style="opacity: ${hasWinner && !team1Winner ? '0.45' : '1'}" />
+                <circle cx="${f1x}" cy="${f1y}" r="21" fill="var(--bg-card)" stroke="${team1Winner ? 'var(--primary)' : 'var(--border-color)'}" stroke-width="${team1Winner ? '2' : '1.5'}" style="opacity: ${hasWinner && !team1Winner ? '0.45' : '1'}" />
+                <image href="${flag1}" x="${f1x - 16.5}" y="${f1y - 16.5}" width="33" height="33" clip-path="url(#flag-clip)" style="opacity: ${hasWinner && !team1Winner ? '0.45' : '1'}" />
             </g>
             <g class="bracket-flag-wrapper" style="--flag-cx: ${f2x}px; --flag-cy: ${f2y}px;" data-match-id="${match.id}">
-                <circle cx="${f2x}" cy="${f2y}" r="14" fill="var(--bg-card)" stroke="${team2Winner ? 'var(--primary)' : 'var(--border-color)'}" stroke-width="${team2Winner ? '2' : '1.5'}" style="opacity: ${hasWinner && !team2Winner ? '0.45' : '1'}" />
-                <image href="${flag2}" x="${f2x - 11}" y="${f2y - 11}" width="22" height="22" clip-path="url(#flag-clip)" style="opacity: ${hasWinner && !team2Winner ? '0.45' : '1'}" />
+                <circle cx="${f2x}" cy="${f2y}" r="21" fill="var(--bg-card)" stroke="${team2Winner ? 'var(--primary)' : 'var(--border-color)'}" stroke-width="${team2Winner ? '2' : '1.5'}" style="opacity: ${hasWinner && !team2Winner ? '0.45' : '1'}" />
+                <image href="${flag2}" x="${f2x - 16.5}" y="${f2y - 16.5}" width="33" height="33" clip-path="url(#flag-clip)" style="opacity: ${hasWinner && !team2Winner ? '0.45' : '1'}" />
             </g>
         `;
     });
 
-    // 4. Draw junction dots or winner flags for rounds
+    // 4. Draw junction dots or winner flags for rounds (larger dimensions)
     Object.values(treeNodes).forEach(node => {
         const match = matchesMap[node.id];
         const winnerName = match ? getMatchWinner(match) : null;
@@ -1228,23 +1228,23 @@ function renderBracket() {
             const flagUrl = getFlagUrl(winnerName);
             svgHtml += `
                 <g class="bracket-flag-wrapper" style="--flag-cx: ${node.x}px; --flag-cy: ${node.y}px;" data-match-id="${node.id}">
-                    <circle cx="${node.x}" cy="${node.y}" r="12" fill="var(--bg-card)" stroke="var(--primary)" stroke-width="1.8" />
-                    <image href="${flagUrl}" x="${node.x - 9.5}" y="${node.y - 9.5}" width="19" height="19" clip-path="url(#flag-clip)" />
+                    <circle cx="${node.x}" cy="${node.y}" r="17" fill="var(--bg-card)" stroke="var(--primary)" stroke-width="1.8" />
+                    <image href="${flagUrl}" x="${node.x - 13.5}" y="${node.y - 13.5}" width="27" height="27" clip-path="url(#flag-clip)" />
                 </g>
             `;
         } else {
             const isCompleted = match && 'score' in match;
             svgHtml += `
-                <circle cx="${node.x}" cy="${node.y}" r="${node.level === 4 ? '5.5' : '4.5'}" class="bracket-dot ${isCompleted ? 'completed' : ''}" data-match-id="${node.id}" />
+                <circle cx="${node.x}" cy="${node.y}" r="${node.level === 4 ? '8' : '6.5'}" class="bracket-dot ${isCompleted ? 'completed' : ''}" data-match-id="${node.id}" />
             `;
         }
     });
 
-    // 5. Draw Central Trophy
+    // 5. Draw Central Trophy (scaled by 1.5x)
     svgHtml += `
         <!-- Central FIFA Trophy Circle -->
-        <circle cx="400" cy="400" r="30" fill="var(--bg-main)" stroke="var(--primary)" stroke-width="2.5" />
-        <g transform="translate(400, 400) scale(0.9)" style="cursor:pointer;" id="trophy-center-btn">
+        <circle cx="600" cy="600" r="45" fill="var(--bg-main)" stroke="var(--primary)" stroke-width="2.5" />
+        <g transform="translate(600, 600) scale(1.35)" style="cursor:pointer;" id="trophy-center-btn">
             <!-- Vector Trophy -->
             <path d="M-10,-15 L10,-15 C10,-15 12,-5 10,5 C8,12 3,15 0,15 C-3,15 -8,12 -10,5 C-12,-5 -10,-15 -10,-15 Z" fill="#fbbf24" />
             <path d="M-5,15 L5,15 L3,22 L-3,22 Z" fill="#d97706" />
