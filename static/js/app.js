@@ -298,6 +298,26 @@ function getLisbonTodayStr() {
     }
 }
 
+function getLisbonTomorrowStr() {
+    const localDate = new Date();
+    localDate.setDate(localDate.getDate() + 1);
+    try {
+        const formatter = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'Europe/Lisbon',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        });
+        const parts = formatter.format(localDate).split('/');
+        return `${parts[2]}-${parts[0]}-${parts[1]}`;
+    } catch (e) {
+        const year = localDate.getFullYear();
+        const month = String(localDate.getMonth() + 1).padStart(2, '0');
+        const day = String(localDate.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+}
+
 // --- Team Flag Mapping Helper ---
 function getFlagUrl(teamName) {
     const countryCodes = {
@@ -1435,31 +1455,28 @@ function renderBracket() {
         container.appendChild(thirdPlaceDiv);
     }
 
-    // 7. Populating the Today's Playoff Matches Sidebar
+    // 7. Populating the Today's and Tomorrow's Playoff Matches Sidebar
+    const tomorrowStr = getLisbonTomorrowStr();
     const todayPlayoffMatches = resolvedPlayoffs.filter(m => m.date === todayStr);
+    const tomorrowPlayoffMatches = resolvedPlayoffs.filter(m => m.date === tomorrowStr);
     const sidebar = document.getElementById('playoffs-today-sidebar');
+
     if (sidebar) {
-        if (todayPlayoffMatches.length > 0) {
+        if (todayPlayoffMatches.length > 0 || tomorrowPlayoffMatches.length > 0) {
             sidebar.classList.remove('hidden');
-            let sidebarHtml = `
-                <div class="playoffs-today-title">
-                    <span class="pulse-today-dot"></span>
-                    <span>TODAY'S PLAYOFF MATCHES</span>
-                </div>
-                <div class="playoffs-today-cards">
-            `;
-            
-            todayPlayoffMatches.forEach(match => {
+            let sidebarHtml = '';
+
+            const generateSidebarCardHtml = (match) => {
                 const isPlayed = 'score' in match;
                 const score1 = isPlayed ? match.score.ft[0] : '-';
                 const score2 = isPlayed ? match.score.ft[1] : '-';
                 const flag1 = getFlagUrl(match.team1_resolved);
                 const flag2 = getFlagUrl(match.team2_resolved);
                 
-                sidebarHtml += `
+                return `
                     <div class="sidebar-match-card" data-match-id="${match.id}">
                         <div class="sidebar-match-header">
-                            <span class="badge ${isPlayed ? 'badge-feature' : 'badge-change'}">${isPlayed ? 'FT Result' : 'Today'}</span>
+                            <span class="badge ${isPlayed ? 'badge-feature' : 'badge-change'}">${isPlayed ? 'FT Result' : 'Playoffs'}</span>
                             <span class="card-date">${match.time || ''}</span>
                         </div>
                         <div class="sidebar-match-body">
@@ -1483,11 +1500,38 @@ function renderBracket() {
                         </div>
                     </div>
                 `;
-            });
-            
-            sidebarHtml += `</div>`;
+            };
+
+            if (todayPlayoffMatches.length > 0) {
+                sidebarHtml += `
+                    <div class="playoffs-today-title">
+                        <span class="pulse-today-dot"></span>
+                        <span>TODAY'S PLAYOFF MATCHES</span>
+                    </div>
+                    <div class="playoffs-today-cards" style="margin-bottom: 1.5rem;">
+                `;
+                todayPlayoffMatches.forEach(match => {
+                    sidebarHtml += generateSidebarCardHtml(match);
+                });
+                sidebarHtml += `</div>`;
+            }
+
+            if (tomorrowPlayoffMatches.length > 0) {
+                sidebarHtml += `
+                    <div class="playoffs-today-title" style="color: var(--text-muted); border-bottom-color: rgba(255, 255, 255, 0.04);">
+                        <span class="tomorrow-dot"></span>
+                        <span>TOMORROW'S PLAYOFF MATCHES</span>
+                    </div>
+                    <div class="playoffs-today-cards">
+                `;
+                tomorrowPlayoffMatches.forEach(match => {
+                    sidebarHtml += generateSidebarCardHtml(match);
+                });
+                sidebarHtml += `</div>`;
+            }
+
             sidebar.innerHTML = sidebarHtml;
-            
+
             // Add click events to open Tweet Modal
             sidebar.querySelectorAll('.sidebar-match-card').forEach(card => {
                 card.addEventListener('click', () => {
