@@ -201,7 +201,8 @@ async function loadDashboardData(forceRefresh = false) {
                 id: `match_${index}`,
                 ...m,
                 date: converted.date,
-                time: converted.time
+                time: converted.time,
+                timestamp: converted.timestamp
             };
         });
         
@@ -240,11 +241,12 @@ async function loadDashboardData(forceRefresh = false) {
 
 // --- Lisbon Timezone Helpers ---
 function convertToLisbonTime(dateStr, timeStr) {
-    if (!timeStr) return { date: dateStr, time: '' };
+    if (!timeStr) return { date: dateStr, time: '', timestamp: 0 };
     
     const match = timeStr.match(/^(\d{2}):(\d{2})\s+UTC([+-]\d+)?$/);
     if (!match) {
-        return { date: dateStr, time: timeStr };
+        const dObj = new Date(dateStr);
+        return { date: dateStr, time: timeStr, timestamp: isNaN(dObj.getTime()) ? 0 : dObj.getTime() };
     }
     
     const hours = parseInt(match[1]);
@@ -273,9 +275,10 @@ function convertToLisbonTime(dateStr, timeStr) {
         
         const lisbonTimeStr = formatterTime.format(dateUtc) + ` ${tzLabel}`;
         
-        return { date: lisbonDateStr, time: lisbonTimeStr };
+        return { date: lisbonDateStr, time: lisbonTimeStr, timestamp: dateUtc.getTime() };
     } catch (e) {
-        return { date: dateStr, time: timeStr };
+        const dObj = new Date(dateStr);
+        return { date: dateStr, time: timeStr, timestamp: isNaN(dObj.getTime()) ? 0 : dObj.getTime() };
     }
 }
 
@@ -401,16 +404,18 @@ function renderMatches() {
     
     showState('grid');
     
-    const todayStr = getLisbonTodayStr();
+    const nowMs = Date.now();
 
     // 4. Generate Cards
     filtered.forEach((match) => {
-        const isToday = match.date === todayStr;
+        const isPlayed = 'score' in match;
+        const diffHours = (match.timestamp - nowMs) / (1000 * 60 * 60);
+        const isUpcoming = !isPlayed && diffHours >= 0 && diffHours <= 12;
+
         const card = document.createElement('div');
-        card.className = `update-card ${state.selectedIds.has(match.id) ? 'selected' : ''} ${isToday ? 'today' : ''}`;
+        card.className = `update-card ${state.selectedIds.has(match.id) ? 'selected' : ''} ${isUpcoming ? 'upcoming' : ''}`;
         card.dataset.id = match.id;
         
-        const isPlayed = 'score' in match;
         const score1 = isPlayed ? match.score.ft[0] : '-';
         const score2 = isPlayed ? match.score.ft[1] : '-';
         const flag1 = getFlagUrl(match.team1);
@@ -438,7 +443,7 @@ function renderMatches() {
             <div class="card-select-indicator"></div>
             <div class="card-header">
                 <span class="badge ${isPlayed ? 'badge-feature' : 'badge-change'}">${isPlayed ? 'FT Result' : 'Upcoming'}</span>
-                ${isToday ? '<span class="badge badge-today">⚡ TODAY</span>' : ''}
+                ${isUpcoming ? '<span class="badge badge-upcoming">⚡ UPCOMING</span>' : ''}
                 <span class="badge badge-announcement">${match.group || 'Playoffs'}</span>
                 <span class="card-date">${formatDate(match.date)}</span>
             </div>
@@ -1116,6 +1121,12 @@ function renderBracket() {
     });
 
     const todayStr = getLisbonTodayStr();
+    const nowMs = Date.now();
+    const isMatchUpcoming = (m) => {
+        if (!m || 'score' in m) return false;
+        const diffHours = (m.timestamp - nowMs) / (1000 * 60 * 60);
+        return diffHours >= 0 && diffHours <= 12;
+    };
 
     // 1. Build coordinate tree nodes in polar format mapped to cartesian (scaled by 1.5x)
     const treeNodes = {};
@@ -1233,7 +1244,7 @@ function renderBracket() {
             
             const mNode = matchesMap[node.id];
             const isCompleted = mNode && 'score' in mNode;
-            const isToday = mNode && mNode.date === todayStr;
+            const isUpcoming = isMatchUpcoming(mNode);
             
             const rParent = parent1.r;
             const rChild = node.r;
@@ -1243,7 +1254,7 @@ function renderBracket() {
             const pathStr = getCircularConnectionPath(rParent, rChild, parent1.angle, parent2.angle, rArc, thetaMid, sweep, largeArc);
             
             svgHtml += `
-                <path d="${pathStr}" class="bracket-line ${isCompleted ? 'active' : ''} ${isToday ? 'today' : ''}" />
+                <path d="${pathStr}" class="bracket-line ${isCompleted ? 'active' : ''} ${isUpcoming ? 'upcoming' : ''}" />
             `;
         }
     });
@@ -1253,12 +1264,12 @@ function renderBracket() {
     const sf2 = treeNodes['match_101'];
     const finalMatch = matchesMap[finalMatchId];
     const finalCompleted = finalMatch && 'score' in finalMatch;
-    const finalToday = finalMatch && finalMatch.date === todayStr;
+    const finalUpcoming = isMatchUpcoming(finalMatch);
     
     const { thetaMid: finalThetaMid, sweep: finalSweep, largeArc: finalLargeArc } = getAngleStats(sf1.angle, sf2.angle);
     const finalPathStr = getCircularConnectionPath(112.5, 45, sf1.angle, sf2.angle, 75, finalThetaMid, finalSweep, finalLargeArc);
     svgHtml += `
-        <path d="${finalPathStr}" class="bracket-line ${finalCompleted ? 'active' : ''} ${finalToday ? 'today' : ''}" />
+        <path d="${finalPathStr}" class="bracket-line ${finalCompleted ? 'active' : ''} ${finalUpcoming ? 'upcoming' : ''}" />
     `;
 
     // 3. Draw outermost flag circles and lines connecting to Round of 32 junctions
@@ -1285,7 +1296,7 @@ function renderBracket() {
         const flag2 = getFlagUrl(match.team2_resolved);
 
         const isCompleted = 'score' in match;
-        const isToday = match.date === todayStr;
+        const isUpcoming = isMatchUpcoming(match);
         const rParent = rFlag;
         const rChild = node.r;
         const rArc = rParent - (rParent - rChild) * 0.4;
@@ -1294,7 +1305,7 @@ function renderBracket() {
         const pathStr = getCircularConnectionPath(rParent, rChild, a1, a2, rArc, thetaMid, sweep, largeArc);
 
         svgHtml += `
-            <path d="${pathStr}" class="bracket-line ${isCompleted ? 'active' : ''} ${isToday ? 'today' : ''}" />
+            <path d="${pathStr}" class="bracket-line ${isCompleted ? 'active' : ''} ${isUpcoming ? 'upcoming' : ''}" />
         `;
 
         const team1Winner = getMatchWinner(match) === match.team1_resolved;
@@ -1302,11 +1313,11 @@ function renderBracket() {
         const hasWinner = team1Winner || team2Winner;
 
         svgHtml += `
-            <g class="bracket-flag-wrapper ${isToday ? 'today' : ''}" style="--flag-cx: ${f1x}px; --flag-cy: ${f1y}px;" data-match-id="${match.id}">
+            <g class="bracket-flag-wrapper ${isUpcoming ? 'upcoming' : ''}" style="--flag-cx: ${f1x}px; --flag-cy: ${f1y}px;" data-match-id="${match.id}">
                 <circle cx="${f1x}" cy="${f1y}" r="21" fill="var(--bg-card)" stroke="${team1Winner ? 'var(--primary)' : 'var(--border-color)'}" stroke-width="${team1Winner ? '2' : '1.5'}" style="opacity: ${hasWinner && !team1Winner ? '0.45' : '1'}" />
                 <image href="${flag1}" x="${f1x - 16.5}" y="${f1y - 16.5}" width="33" height="33" clip-path="url(#flag-clip)" style="opacity: ${hasWinner && !team1Winner ? '0.45' : '1'}" />
             </g>
-            <g class="bracket-flag-wrapper ${isToday ? 'today' : ''}" style="--flag-cx: ${f2x}px; --flag-cy: ${f2y}px;" data-match-id="${match.id}">
+            <g class="bracket-flag-wrapper ${isUpcoming ? 'upcoming' : ''}" style="--flag-cx: ${f2x}px; --flag-cy: ${f2y}px;" data-match-id="${match.id}">
                 <circle cx="${f2x}" cy="${f2y}" r="21" fill="var(--bg-card)" stroke="${team2Winner ? 'var(--primary)' : 'var(--border-color)'}" stroke-width="${team2Winner ? '2' : '1.5'}" style="opacity: ${hasWinner && !team2Winner ? '0.45' : '1'}" />
                 <image href="${flag2}" x="${f2x - 16.5}" y="${f2y - 16.5}" width="33" height="33" clip-path="url(#flag-clip)" style="opacity: ${hasWinner && !team2Winner ? '0.45' : '1'}" />
             </g>
@@ -1317,12 +1328,12 @@ function renderBracket() {
     Object.values(treeNodes).forEach(node => {
         const match = matchesMap[node.id];
         const winnerName = match ? getMatchWinner(match) : null;
-        const isToday = match && match.date === todayStr;
+        const isUpcoming = isMatchUpcoming(match);
         
         if (winnerName) {
             const flagUrl = getFlagUrl(winnerName);
             svgHtml += `
-                <g class="bracket-flag-wrapper ${isToday ? 'today' : ''}" style="--flag-cx: ${node.x}px; --flag-cy: ${node.y}px;" data-match-id="${node.id}">
+                <g class="bracket-flag-wrapper ${isUpcoming ? 'upcoming' : ''}" style="--flag-cx: ${node.x}px; --flag-cy: ${node.y}px;" data-match-id="${node.id}">
                     <circle cx="${node.x}" cy="${node.y}" r="17" fill="var(--bg-card)" stroke="var(--primary)" stroke-width="1.8" />
                     <image href="${flagUrl}" x="${node.x - 13.5}" y="${node.y - 13.5}" width="27" height="27" clip-path="url(#flag-clip)" />
                 </g>
@@ -1330,7 +1341,7 @@ function renderBracket() {
         } else {
             const isCompleted = match && 'score' in match;
             svgHtml += `
-                <circle cx="${node.x}" cy="${node.y}" r="${node.level === 4 ? '8' : '6.5'}" class="bracket-dot ${isCompleted ? 'completed' : ''} ${isToday ? 'today' : ''}" data-match-id="${node.id}" />
+                <circle cx="${node.x}" cy="${node.y}" r="${node.level === 4 ? '8' : '6.5'}" class="bracket-dot ${isCompleted ? 'completed' : ''} ${isUpcoming ? 'upcoming' : ''}" data-match-id="${node.id}" />
             `;
         }
     });
@@ -1455,28 +1466,31 @@ function renderBracket() {
         container.appendChild(thirdPlaceDiv);
     }
 
-    // 7. Populating the Today's and Tomorrow's Playoff Matches Sidebar
-    const tomorrowStr = getLisbonTomorrowStr();
-    const todayPlayoffMatches = resolvedPlayoffs.filter(m => m.date === todayStr);
-    const tomorrowPlayoffMatches = resolvedPlayoffs.filter(m => m.date === tomorrowStr);
+    // 7. Populating the Upcoming Playoff Matches Sidebar (Next 12 Hours)
+    const upcomingPlayoffMatches = resolvedPlayoffs.filter(m => isMatchUpcoming(m));
     const sidebar = document.getElementById('playoffs-today-sidebar');
 
     if (sidebar) {
-        if (todayPlayoffMatches.length > 0 || tomorrowPlayoffMatches.length > 0) {
+        if (upcomingPlayoffMatches.length > 0) {
             sidebar.classList.remove('hidden');
-            let sidebarHtml = '';
+            let sidebarHtml = `
+                <div class="playoffs-today-title">
+                    <span class="pulse-today-dot"></span>
+                    <span>UPCOMING PLAYOFF MATCHES</span>
+                </div>
+                <div class="playoffs-today-cards">
+            `;
 
-            const generateSidebarCardHtml = (match) => {
-                const isPlayed = 'score' in match;
-                const score1 = isPlayed ? match.score.ft[0] : '-';
-                const score2 = isPlayed ? match.score.ft[1] : '-';
+            upcomingPlayoffMatches.forEach(match => {
+                const score1 = '-';
+                const score2 = '-';
                 const flag1 = getFlagUrl(match.team1_resolved);
                 const flag2 = getFlagUrl(match.team2_resolved);
                 
-                return `
+                sidebarHtml += `
                     <div class="sidebar-match-card" data-match-id="${match.id}">
                         <div class="sidebar-match-header">
-                            <span class="badge ${isPlayed ? 'badge-feature' : 'badge-change'}">${isPlayed ? 'FT Result' : 'Playoffs'}</span>
+                            <span class="badge badge-change">Next 12h</span>
                             <span class="card-date">${match.time || ''}</span>
                         </div>
                         <div class="sidebar-match-body">
@@ -1500,36 +1514,9 @@ function renderBracket() {
                         </div>
                     </div>
                 `;
-            };
+            });
 
-            if (todayPlayoffMatches.length > 0) {
-                sidebarHtml += `
-                    <div class="playoffs-today-title">
-                        <span class="pulse-today-dot"></span>
-                        <span>TODAY'S PLAYOFF MATCHES</span>
-                    </div>
-                    <div class="playoffs-today-cards" style="margin-bottom: 1.5rem;">
-                `;
-                todayPlayoffMatches.forEach(match => {
-                    sidebarHtml += generateSidebarCardHtml(match);
-                });
-                sidebarHtml += `</div>`;
-            }
-
-            if (tomorrowPlayoffMatches.length > 0) {
-                sidebarHtml += `
-                    <div class="playoffs-today-title" style="color: var(--text-muted); border-bottom-color: rgba(255, 255, 255, 0.04);">
-                        <span class="tomorrow-dot"></span>
-                        <span>TOMORROW'S PLAYOFF MATCHES</span>
-                    </div>
-                    <div class="playoffs-today-cards">
-                `;
-                tomorrowPlayoffMatches.forEach(match => {
-                    sidebarHtml += generateSidebarCardHtml(match);
-                });
-                sidebarHtml += `</div>`;
-            }
-
+            sidebarHtml += `</div>`;
             sidebar.innerHTML = sidebarHtml;
 
             // Add click events to open Tweet Modal
