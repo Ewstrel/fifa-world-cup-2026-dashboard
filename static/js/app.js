@@ -194,11 +194,16 @@ async function loadDashboardData(forceRefresh = false) {
         if (!newsData.success) throw new Error(newsData.error || 'Server failed to fetch soccer news');
         
         // 1. Process matches
-        // Add artificial ID for mapping
-        state.rawMatches = wcData.data.matches.map((m, index) => ({
-            id: `match_${index}`,
-            ...m
-        }));
+        // Add artificial ID for mapping and convert date/time to Lisbon timezone
+        state.rawMatches = wcData.data.matches.map((m, index) => {
+            const converted = convertToLisbonTime(m.date, m.time);
+            return {
+                id: `match_${index}`,
+                ...m,
+                date: converted.date,
+                time: converted.time
+            };
+        });
         
         // Reset selections
         state.selectedIds.clear();
@@ -230,6 +235,66 @@ async function loadDashboardData(forceRefresh = false) {
         if (refreshIcon) refreshIcon.classList.remove('spinning');
         if (elements.refreshBtn) elements.refreshBtn.disabled = false;
         if (elements.newsLoadingState) elements.newsLoadingState.classList.add('hidden');
+    }
+}
+
+// --- Lisbon Timezone Helpers ---
+function convertToLisbonTime(dateStr, timeStr) {
+    if (!timeStr) return { date: dateStr, time: '' };
+    
+    const match = timeStr.match(/^(\d{2}):(\d{2})\s+UTC([+-]\d+)?$/);
+    if (!match) {
+        return { date: dateStr, time: timeStr };
+    }
+    
+    const hours = parseInt(match[1]);
+    const minutes = parseInt(match[2]);
+    const offset = match[3] ? parseInt(match[3]) : 0;
+    
+    const parts = dateStr.split('-');
+    const year = parseInt(parts[0]);
+    const month = parseInt(parts[1]) - 1;
+    const day = parseInt(parts[2]);
+    
+    const dateUtc = new Date(Date.UTC(year, month, day, hours - offset, minutes));
+    
+    try {
+        const optionsDate = { timeZone: 'Europe/Lisbon', year: 'numeric', month: '2-digit', day: '2-digit' };
+        const optionsTime = { timeZone: 'Europe/Lisbon', hour: '2-digit', minute: '2-digit', hour12: false };
+        
+        const formatterDate = new Intl.DateTimeFormat('en-US', optionsDate);
+        const formatterTime = new Intl.DateTimeFormat('en-US', optionsTime);
+        
+        const dateParts = formatterDate.format(dateUtc).split('/');
+        const lisbonDateStr = `${dateParts[2]}-${dateParts[0]}-${dateParts[1]}`;
+        
+        const tempString = dateUtc.toLocaleString('en-US', { timeZone: 'Europe/Lisbon', timeZoneName: 'short' });
+        const tzLabel = tempString.split(' ').pop();
+        
+        const lisbonTimeStr = formatterTime.format(dateUtc) + ` ${tzLabel}`;
+        
+        return { date: lisbonDateStr, time: lisbonTimeStr };
+    } catch (e) {
+        return { date: dateStr, time: timeStr };
+    }
+}
+
+function getLisbonTodayStr() {
+    const localDate = new Date();
+    try {
+        const formatter = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'Europe/Lisbon',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        });
+        const parts = formatter.format(localDate).split('/');
+        return `${parts[2]}-${parts[0]}-${parts[1]}`;
+    } catch (e) {
+        const year = localDate.getFullYear();
+        const month = String(localDate.getMonth() + 1).padStart(2, '0');
+        const day = String(localDate.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
     }
 }
 
@@ -316,10 +381,13 @@ function renderMatches() {
     
     showState('grid');
     
+    const todayStr = getLisbonTodayStr();
+
     // 4. Generate Cards
     filtered.forEach((match) => {
+        const isToday = match.date === todayStr;
         const card = document.createElement('div');
-        card.className = `update-card ${state.selectedIds.has(match.id) ? 'selected' : ''}`;
+        card.className = `update-card ${state.selectedIds.has(match.id) ? 'selected' : ''} ${isToday ? 'today' : ''}`;
         card.dataset.id = match.id;
         
         const isPlayed = 'score' in match;
@@ -350,6 +418,7 @@ function renderMatches() {
             <div class="card-select-indicator"></div>
             <div class="card-header">
                 <span class="badge ${isPlayed ? 'badge-feature' : 'badge-change'}">${isPlayed ? 'FT Result' : 'Upcoming'}</span>
+                ${isToday ? '<span class="badge badge-today">⚡ TODAY</span>' : ''}
                 <span class="badge badge-announcement">${match.group || 'Playoffs'}</span>
                 <span class="card-date">${formatDate(match.date)}</span>
             </div>
@@ -1026,11 +1095,7 @@ function renderBracket() {
         matchesMap[m.id] = m;
     });
 
-    const localDate = new Date();
-    const year = localDate.getFullYear();
-    const month = String(localDate.getMonth() + 1).padStart(2, '0');
-    const day = String(localDate.getDate()).padStart(2, '0');
-    const todayStr = `${year}-${month}-${day}`;
+    const todayStr = getLisbonTodayStr();
 
     // 1. Build coordinate tree nodes in polar format mapped to cartesian (scaled by 1.5x)
     const treeNodes = {};
