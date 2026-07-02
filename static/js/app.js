@@ -1369,6 +1369,72 @@ function renderBracket() {
         });
         container.appendChild(thirdPlaceDiv);
     }
+
+    // 7. Populating the Today's Playoff Matches Sidebar
+    const todayPlayoffMatches = resolvedPlayoffs.filter(m => m.date === todayStr);
+    const sidebar = document.getElementById('playoffs-today-sidebar');
+    if (sidebar) {
+        if (todayPlayoffMatches.length > 0) {
+            sidebar.classList.remove('hidden');
+            let sidebarHtml = `
+                <div class="playoffs-today-title">
+                    <span class="pulse-today-dot"></span>
+                    <span>TODAY'S PLAYOFF MATCHES</span>
+                </div>
+                <div class="playoffs-today-cards">
+            `;
+            
+            todayPlayoffMatches.forEach(match => {
+                const isPlayed = 'score' in match;
+                const score1 = isPlayed ? match.score.ft[0] : '-';
+                const score2 = isPlayed ? match.score.ft[1] : '-';
+                const flag1 = getFlagUrl(match.team1_resolved);
+                const flag2 = getFlagUrl(match.team2_resolved);
+                
+                sidebarHtml += `
+                    <div class="sidebar-match-card" data-match-id="${match.id}">
+                        <div class="sidebar-match-header">
+                            <span class="badge ${isPlayed ? 'badge-feature' : 'badge-change'}">${isPlayed ? 'FT Result' : 'Today'}</span>
+                            <span class="card-date">${match.time || ''}</span>
+                        </div>
+                        <div class="sidebar-match-body">
+                            <div class="sidebar-team-row">
+                                <div class="sidebar-team-info">
+                                    <img class="sidebar-team-flag" src="${flag1}" alt="${match.team1_resolved} flag">
+                                    <span class="sidebar-team-name">${match.team1_resolved}</span>
+                                </div>
+                                <span class="sidebar-team-score">${score1}</span>
+                            </div>
+                            <div class="sidebar-team-row">
+                                <div class="sidebar-team-info">
+                                    <img class="sidebar-team-flag" src="${flag2}" alt="${match.team2_resolved} flag">
+                                    <span class="sidebar-team-name">${match.team2_resolved}</span>
+                                </div>
+                                <span class="sidebar-team-score">${score2}</span>
+                            </div>
+                        </div>
+                        <div class="sidebar-match-footer">
+                            📍 ${match.ground}
+                        </div>
+                    </div>
+                `;
+            });
+            
+            sidebarHtml += `</div>`;
+            sidebar.innerHTML = sidebarHtml;
+            
+            // Add click events to open Tweet Modal
+            sidebar.querySelectorAll('.sidebar-match-card').forEach(card => {
+                card.addEventListener('click', () => {
+                    const m = resolvedPlayoffs.find(x => x.id === card.dataset.matchId);
+                    if (m) openTweetModal([m]);
+                });
+            });
+        } else {
+            sidebar.classList.add('hidden');
+            sidebar.innerHTML = '';
+        }
+    }
 }
 
 // Tooltip Helpers
