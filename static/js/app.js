@@ -1051,6 +1051,20 @@ function getMatchLoser(match) {
     return winner === t1 ? t2 : t1;
 }
 
+function isTeamEliminated(teamName, resolvedPlayoffs) {
+    if (!teamName) return false;
+    return resolvedPlayoffs.some(m => {
+        if (!('score' in m)) return false;
+        const winner = getMatchWinner(m);
+        const t1 = m.team1_resolved || m.team1;
+        const t2 = m.team2_resolved || m.team2;
+        if (t1 === teamName || t2 === teamName) {
+            return winner && winner !== teamName;
+        }
+        return false;
+    });
+}
+
 function getResolvedPlayoffMatches() {
     const matchesMap = {};
     state.rawMatches.forEach(m => {
@@ -1310,16 +1324,18 @@ function renderBracket() {
 
         const team1Winner = getMatchWinner(match) === match.team1_resolved;
         const team2Winner = getMatchWinner(match) === match.team2_resolved;
-        const hasWinner = team1Winner || team2Winner;
+
+        const op1 = isTeamEliminated(match.team1_resolved, resolvedPlayoffs) ? '0.45' : '1';
+        const op2 = isTeamEliminated(match.team2_resolved, resolvedPlayoffs) ? '0.45' : '1';
 
         svgHtml += `
-            <g class="bracket-flag-wrapper ${isUpcoming ? 'upcoming' : ''}" style="--flag-cx: ${f1x}px; --flag-cy: ${f1y}px;" data-match-id="${match.id}">
-                <circle cx="${f1x}" cy="${f1y}" r="21" fill="var(--bg-card)" stroke="${team1Winner ? 'var(--primary)' : 'var(--border-color)'}" stroke-width="${team1Winner ? '2' : '1.5'}" style="opacity: ${hasWinner && !team1Winner ? '0.45' : '1'}" />
-                <image href="${flag1}" x="${f1x - 16.5}" y="${f1y - 16.5}" width="33" height="33" clip-path="url(#flag-clip)" style="opacity: ${hasWinner && !team1Winner ? '0.45' : '1'}" />
+            <g class="bracket-flag-wrapper ${isUpcoming ? 'upcoming' : ''}" style="--flag-cx: ${f1x}px; --flag-cy: ${f1y}px; opacity: ${op1};" data-match-id="${match.id}">
+                <circle cx="${f1x}" cy="${f1y}" r="21" fill="var(--bg-card)" stroke="${team1Winner ? 'var(--primary)' : 'var(--border-color)'}" stroke-width="${team1Winner ? '2' : '1.5'}" />
+                <image href="${flag1}" x="${f1x - 16.5}" y="${f1y - 16.5}" width="33" height="33" clip-path="url(#flag-clip)" />
             </g>
-            <g class="bracket-flag-wrapper ${isUpcoming ? 'upcoming' : ''}" style="--flag-cx: ${f2x}px; --flag-cy: ${f2y}px;" data-match-id="${match.id}">
-                <circle cx="${f2x}" cy="${f2y}" r="21" fill="var(--bg-card)" stroke="${team2Winner ? 'var(--primary)' : 'var(--border-color)'}" stroke-width="${team2Winner ? '2' : '1.5'}" style="opacity: ${hasWinner && !team2Winner ? '0.45' : '1'}" />
-                <image href="${flag2}" x="${f2x - 16.5}" y="${f2y - 16.5}" width="33" height="33" clip-path="url(#flag-clip)" style="opacity: ${hasWinner && !team2Winner ? '0.45' : '1'}" />
+            <g class="bracket-flag-wrapper ${isUpcoming ? 'upcoming' : ''}" style="--flag-cx: ${f2x}px; --flag-cy: ${f2y}px; opacity: ${op2};" data-match-id="${match.id}">
+                <circle cx="${f2x}" cy="${f2y}" r="21" fill="var(--bg-card)" stroke="${team2Winner ? 'var(--primary)' : 'var(--border-color)'}" stroke-width="${team2Winner ? '2' : '1.5'}" />
+                <image href="${flag2}" x="${f2x - 16.5}" y="${f2y - 16.5}" width="33" height="33" clip-path="url(#flag-clip)" />
             </g>
         `;
     });
@@ -1332,8 +1348,9 @@ function renderBracket() {
         
         if (winnerName) {
             const flagUrl = getFlagUrl(winnerName);
+            const op = isTeamEliminated(winnerName, resolvedPlayoffs) ? '0.45' : '1';
             svgHtml += `
-                <g class="bracket-flag-wrapper ${isUpcoming ? 'upcoming' : ''}" style="--flag-cx: ${node.x}px; --flag-cy: ${node.y}px;" data-match-id="${node.id}">
+                <g class="bracket-flag-wrapper ${isUpcoming ? 'upcoming' : ''}" style="--flag-cx: ${node.x}px; --flag-cy: ${node.y}px; opacity: ${op};" data-match-id="${node.id}">
                     <circle cx="${node.x}" cy="${node.y}" r="17" fill="var(--bg-card)" stroke="var(--primary)" stroke-width="1.8" />
                     <image href="${flagUrl}" x="${node.x - 13.5}" y="${node.y - 13.5}" width="27" height="27" clip-path="url(#flag-clip)" />
                 </g>
