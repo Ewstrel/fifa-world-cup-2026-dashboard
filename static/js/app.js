@@ -1330,12 +1330,12 @@ function renderBracket() {
 
         svgHtml += `
             <g class="bracket-flag-wrapper ${isUpcoming ? 'upcoming' : ''}" style="--flag-cx: ${f1x}px; --flag-cy: ${f1y}px; opacity: ${op1};" data-match-id="${match.id}">
-                <circle cx="${f1x}" cy="${f1y}" r="21" fill="var(--bg-card)" stroke="${team1Winner ? 'var(--primary)' : 'var(--border-color)'}" stroke-width="${team1Winner ? '2' : '1.5'}" />
-                <image href="${flag1}" x="${f1x - 16.5}" y="${f1y - 16.5}" width="33" height="33" clip-path="url(#flag-clip)" />
+                <circle cx="${f1x}" cy="${f1y}" r="20" fill="var(--bg-card)" stroke="${team1Winner ? 'var(--primary)' : 'var(--border-color)'}" stroke-width="${team1Winner ? '2' : '1.5'}" />
+                <image href="${flag1}" x="${f1x - 15.5}" y="${f1y - 15.5}" width="31" height="31" clip-path="url(#flag-clip)" />
             </g>
             <g class="bracket-flag-wrapper ${isUpcoming ? 'upcoming' : ''}" style="--flag-cx: ${f2x}px; --flag-cy: ${f2y}px; opacity: ${op2};" data-match-id="${match.id}">
-                <circle cx="${f2x}" cy="${f2y}" r="21" fill="var(--bg-card)" stroke="${team2Winner ? 'var(--primary)' : 'var(--border-color)'}" stroke-width="${team2Winner ? '2' : '1.5'}" />
-                <image href="${flag2}" x="${f2x - 16.5}" y="${f2y - 16.5}" width="33" height="33" clip-path="url(#flag-clip)" />
+                <circle cx="${f2x}" cy="${f2y}" r="20" fill="var(--bg-card)" stroke="${team2Winner ? 'var(--primary)' : 'var(--border-color)'}" stroke-width="${team2Winner ? '2' : '1.5'}" />
+                <image href="${flag2}" x="${f2x - 15.5}" y="${f2y - 15.5}" width="31" height="31" clip-path="url(#flag-clip)" />
             </g>
         `;
     });
@@ -1349,10 +1349,37 @@ function renderBracket() {
         if (winnerName) {
             const flagUrl = getFlagUrl(winnerName);
             const op = isTeamEliminated(winnerName, resolvedPlayoffs) ? '0.45' : '1';
+            
+            // Define increasing sizes based on the stage (node.level)
+            // level: 4 (Round of 16), 3 (Quarterfinals), 2 (Semifinals), 1 (Finals)
+            let r = 17;
+            let imgSize = 27;
+            let strokeW = 1.8;
+            
+            if (node.level === 4) {
+                r = 23;
+                imgSize = 36;
+                strokeW = 2.0;
+            } else if (node.level === 3) {
+                r = 27;
+                imgSize = 42;
+                strokeW = 2.2;
+            } else if (node.level === 2) {
+                r = 31;
+                imgSize = 48;
+                strokeW = 2.4;
+            } else if (node.level === 1) {
+                r = 35;
+                imgSize = 55;
+                strokeW = 2.6;
+            }
+            
+            const imgOffset = imgSize / 2;
+            
             svgHtml += `
                 <g class="bracket-flag-wrapper ${isUpcoming ? 'upcoming' : ''}" style="--flag-cx: ${node.x}px; --flag-cy: ${node.y}px; opacity: ${op};" data-match-id="${node.id}">
-                    <circle cx="${node.x}" cy="${node.y}" r="17" fill="var(--bg-card)" stroke="var(--primary)" stroke-width="1.8" />
-                    <image href="${flagUrl}" x="${node.x - 13.5}" y="${node.y - 13.5}" width="27" height="27" clip-path="url(#flag-clip)" />
+                    <circle cx="${node.x}" cy="${node.y}" r="${r}" fill="var(--bg-card)" stroke="var(--primary)" stroke-width="${strokeW}" />
+                    <image href="${flagUrl}" x="${node.x - imgOffset}" y="${node.y - imgOffset}" width="${imgSize}" height="${imgSize}" clip-path="url(#flag-clip)" />
                 </g>
             `;
         } else {
